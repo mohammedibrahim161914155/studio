@@ -1,46 +1,75 @@
+'use client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/shadcn/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/shadcn/avatar";
 import { cn } from "@/lib/utils";
-
-const devices: { name: string, platform: string, status: 'online' | 'offline', id: number }[] = [
-  // { name: "My Desktop", platform: "Windows", status: "online", id: 1 },
-  // { name: "iPhone 15 Pro", platform: "iOS", status: "online", id: 2 },
-  // { name: "Sarah's MacBook", platform: "macOS", status: "offline", id: 3 },
-];
+import { usePeerStore } from "@/connection/peer";
+import { Wifi, WifiOff, Loader } from "lucide-react";
 
 export function DeviceList() {
+  const { status } = usePeerStore();
+
+  const getStatusInfo = () => {
+    switch (status) {
+      case 'connected':
+        return { 
+          message: "Remote Peer", 
+          desc: "Ready for transfer.",
+          icon: <Wifi className="w-5 h-5 text-primary" />,
+          statusClass: 'bg-primary'
+        };
+      case 'connecting':
+        return { 
+          message: "Connecting...", 
+          desc: "Waiting for peer response.",
+          icon: <Loader className="w-5 h-5 text-muted-foreground animate-spin" />,
+          statusClass: 'bg-yellow-500'
+        };
+      case 'error':
+        return { 
+          message: "Connection Failed", 
+          desc: "An error occurred.",
+          icon: <WifiOff className="w-5 h-5 text-destructive" />,
+          statusClass: 'bg-destructive'
+        };
+      case 'disconnected':
+      default:
+        return { 
+          message: "No Active Peer", 
+          desc: "Pair a device to begin.",
+          icon: <WifiOff className="w-5 h-5 text-muted-foreground" />,
+          statusClass: 'bg-muted-foreground'
+        };
+    }
+  };
+
+  const { message, desc, icon, statusClass } = getStatusInfo();
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Active Peers</CardTitle>
-        <CardDescription>Devices available for transfer.</CardDescription>
+        <CardTitle className="font-headline">Active Peer</CardTitle>
+        <CardDescription>The device you are connected to.</CardDescription>
       </CardHeader>
       <CardContent>
-        {devices.length === 0 ? (
+        {status === 'disconnected' ? (
           <div className="flex items-center justify-center h-24 text-muted-foreground">
-            No active peers.
+            {message}
           </div>
         ) : (
           <ul className="space-y-4">
-            {devices.map((device) => (
-              <li key={device.name} className="flex items-center gap-4">
-                <Avatar>
-                  <AvatarImage src={`https://picsum.photos/40/40?grayscale&random=${device.id}`} width={40} height={40} data-ai-hint="person avatar"/>
-                  <AvatarFallback>{device.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{device.name}</p>
-                  <p className="text-xs text-muted-foreground">{device.platform}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "h-2 w-2 rounded-full",
-                    device.status === 'online' ? 'bg-primary' : 'bg-muted-foreground'
-                  )}></span>
-                  <span className="text-sm text-muted-foreground capitalize">{device.status}</span>
-                </div>
-              </li>
-            ))}
+            <li className="flex items-center gap-4">
+              <Avatar>
+                <AvatarFallback>{icon}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{message}</p>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={cn("h-2 w-2 rounded-full", statusClass)}></span>
+                <span className="text-sm text-muted-foreground capitalize">{status}</span>
+              </div>
+            </li>
           </ul>
         )}
       </CardContent>
