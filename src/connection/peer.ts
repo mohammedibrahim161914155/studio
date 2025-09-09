@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import Peer, { Instance, SignalData } from 'simple-peer';
 import { useTransferStore } from '@/core/transfer';
 import { Peer as PeerInfo, usePeerManagerStore } from '@/core/peer-manager';
+import { useToast } from '@/hooks/use-toast';
 
 export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -82,8 +83,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     newPeer.on('data', async (data) => {
       try {
         const message: PeerMessage = JSON.parse(data.toString());
-        const { addFiles, updateFileProgress, updateFileStatus, getFile, setFileChecksum, calculateFileChecksum } = useTransferStore.getState();
-        const { updatePeerName } = usePeerManagerStore.getState();
+        const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile } = useTransferStore.getState();
+        const { updatePeerName, getPeer } = usePeerManagerStore.getState();
+        const { toast } = useToast();
 
         switch (message.type) {
           case 'handshake': {
@@ -96,18 +98,39 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           case 'metadata': {
             console.log('Received metadata for:', message.payload.name);
             const { name, size, type, checksum } = message.payload;
-            receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size, checksum };
-            const placeholderFile = new File([], name, { type });
-            addFiles([placeholderFile]);
-            updateFileStatus(name, 'sending', get().activePeer?.id);
-            setFileChecksum(name, checksum);
+            const peerId = get().activePeer?.id;
+
+            if (!peerId) return;
+
+            const peer = getPeer(peerId);
+            const handleReceive = () => {
+                receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size, checksum };
+                startReceivingFile({ name, size, type, checksum, peerId });
+            }
+
+            if(peer?.trusted) {
+                toast({ title: `Incoming transfer from ${peer.name}`, description: `Auto-accepting trusted transfer for ${name}`})
+                handleReceive();
+            } else {
+                toast({
+                    title: 'Incoming File Transfer',
+                    description: `${peer?.name || 'A peer'} wants to send you "${name}". Do you accept?`,
+                    action: (
+                        <>
+                            <button onClick={() => handleReceive()} className="bg-primary text-primary-foreground hover:bg-primary/90 p-2 rounded-md">Accept</button>
+                            <button onClick={() => {}} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 p-2 rounded-md">Decline</button>
+                        </>
+                    ),
+                    duration: 30000,
+                })
+            }
             break;
           }
             
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
             if (receivingFiles[name]) {
-              const arrayBuffer = new Uint8Array(Object.values(chunk)).buffer;
+              const arrayBuffer = chunk;
               receivingFiles[name].chunks[chunkIndex] = arrayBuffer;
               receivingFiles[name].receivedSize += arrayBuffer.byteLength;
 
@@ -124,9 +147,11 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                  if (receivedChecksum === receivingFiles[name].checksum) {
                     updateFileStatus(name, 'complete', get().activePeer?.id);
                     get().send({ type: 'transfer-verified', payload: { name } });
+                    toast({ title: "Transfer Complete", description: `Successfully received and verified ${name}.` });
                  } else {
                     console.error(`Checksum mismatch for ${name}`);
                     updateFileStatus(name, 'error', get().activePeer?.id);
+                    toast({ variant: 'destructive', title: "Transfer Failed", description: `Checksum verification failed for ${name}.` });
                  }
 
                  delete receivingFiles[name];
@@ -138,6 +163,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           case 'transfer-verified':
             console.log('Transfer verified for:', message.payload.name);
             updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);
+            toast({ title: "Transfer Complete", description: `${message.payload.name} was successfully sent and verified by the peer.` });
             break;
         }
       } catch (error) {
@@ -180,12 +206,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
   send: (message) => {
     if (get().status === 'connected') {
-        const payload = message.payload as any;
-        const processedPayload = { ...payload };
-        if (payload.chunk instanceof ArrayBuffer) {
-            processedPayload.chunk = Array.from(new Uint8Array(payload.chunk));
-        }
-        get().peer?.send(JSON.stringify({ ...message, payload: processedPayload }));
+        get().peer?.send(JSON.stringify(message));
     } else {
       console.warn('Cannot send data, peer is not connected.');
     }

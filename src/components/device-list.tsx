@@ -1,12 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 import { cn } from "@/lib/utils";
 
-const devices: { name: string, platform: string, status: 'online' | 'offline', id: number }[] = [
-  // { name: "My Desktop", platform: "Windows", status: "online", id: 1 },
-  // { name: "iPhone 15 Pro", platform: "iOS", status: "online", id: 2 },
-  // { name: "Sarah's MacBook", platform: "macOS", status: "offline", id: 3 },
-];
+const devices: { name: string, platform: string, status: 'online' | 'offline', id: number }[] = [];
 
 export function DeviceList() {
   return (

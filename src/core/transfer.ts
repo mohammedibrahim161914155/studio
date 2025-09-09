@@ -10,6 +10,7 @@ export type TransferFile = {
   lastUpdateTime: number;
   lastSentBytes: number;
   peerId?: string; // Which peer this file is going to/from
+  direction: 'sent' | 'received';
 };
 
 type TransferState = {
@@ -20,6 +21,7 @@ type TransferState = {
   setFileChecksum: (fileName: string, checksum: string) => void;
   removeFile: (fileName: string) => void;
   clearFiles: () => void;
+  startReceivingFile: (metadata: {name: string, size: number, type: string, checksum: string, peerId: string}) => void;
   calculateFileChecksum: (file: File | Blob) => Promise<string>;
   getFile: (fileName: string) => TransferFile | undefined;
 };
@@ -45,9 +47,28 @@ export const useTransferStore = create<TransferState>((set, get) => ({
           speed: 0,
           lastUpdateTime: 0,
           lastSentBytes: 0,
+          direction: 'sent'
         }));
       return { files: [...state.files, ...newTransferFiles] };
     }),
+  startReceivingFile: (metadata) => {
+    const { name, size, type, checksum, peerId } = metadata;
+    const placeholderFile = new File([], name, { type });
+    const newTransferFile: TransferFile = {
+        file: placeholderFile,
+        progress: 0,
+        status: 'sending',
+        speed: 0,
+        lastUpdateTime: 0,
+        lastSentBytes: 0,
+        checksum,
+        peerId,
+        direction: 'received',
+    };
+    set(state => ({
+        files: [...state.files.filter(f => f.file.name !== name), newTransferFile]
+    }));
+  },
   updateFileProgress: (fileName: string, sentBytes: number) =>
     set((state) => {
       const now = Date.now();
@@ -93,9 +114,9 @@ export const useTransferStore = create<TransferState>((set, get) => ({
               fileSize: updatedTf.file.size,
               fileType: updatedTf.file.type,
               peerId: updatedTf.peerId || 'Unknown Peer',
-              status: updatedTf.status,
+              status: updatedTf.status as 'complete' | 'error',
               timestamp: new Date(),
-              direction: 'sent' // This needs to be dynamic
+              direction: updatedTf.direction
             });
           }
           return updatedTf;

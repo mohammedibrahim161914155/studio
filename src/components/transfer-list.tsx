@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/ui/table";
+import { Progress } from "@/ui/progress";
+import { Button } from "@/ui/button";
 import { Pause, Play, Trash2, File, Folder } from "lucide-react";
 
 type Transfer = {
@@ -17,12 +17,7 @@ type Transfer = {
 };
 
 
-const initialTransfers: Transfer[] = [
-  // { id: 1, name: "project_files.zip", type: "file", size: "1.2 GB", progress: 30, status: "sending" },
-  // { id: 2, name: "kyber-dilithium-impl.pdf", type: "file", size: "2.5 MB", progress: 85, status: "sending" },
-  // { id: 3, name: "summer_vacation_photos", type: "folder", size: "4.8 GB", progress: 10, status: "paused" },
-  // { id: 4, name: "presentation.pptx", type: "file", size: "150 MB", progress: 100, status: "complete" },
-];
+const initialTransfers: Transfer[] = [];
 
 export function TransferList() {
   const [transfers, setTransfers] = useState(initialTransfers);
