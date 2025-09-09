@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Send, Share2, Smartphone, Settings, Shield, BarChart2, HardDrive } from "lucide-react";
+import { Send, Share2, Smartphone, Settings, Shield, BarChart2, HardDrive, History } from "lucide-react";
 import {
   SidebarHeader,
   SidebarContent,
@@ -35,6 +35,14 @@ export function SidebarNav() {
               <Link href="/">
                 <Send />
                 <span>Transfer</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive("/history")} tooltip="Transfer History">
+              <Link href="/history">
+                <History />
+                <span>History</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

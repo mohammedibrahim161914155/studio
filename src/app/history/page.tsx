@@ -1,11 +1,9 @@
 import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
 import { Header } from "@/ui/components/layout/header";
-import { FileDropzone } from "@/ui/components/file-dropzone";
-import { TransferList } from "@/ui/components/transfer-list";
-import { DeviceList } from "@/ui/components/device-list";
 import { SidebarNav } from "@/ui/components/layout/sidebar-nav";
+import { TransferHistoryList } from "@/ui/components/transfer-history-list";
 
-export default function Home() {
+export default function HistoryPage() {
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background">
@@ -16,15 +14,7 @@ export default function Home() {
           <SidebarInset>
             <Header />
             <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
-              <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
-                <div className="md:col-span-2 lg:col-span-3">
-                  <FileDropzone />
-                </div>
-                <div className="md:col-span-1 lg:col-span-2">
-                  <DeviceList />
-                </div>
-              </div>
-              <TransferList />
+                <TransferHistoryList />
             </main>
           </SidebarInset>
         </div>

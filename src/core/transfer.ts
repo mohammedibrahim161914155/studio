@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useLogStore } from './transfer-log';
 
 export type TransferFile = {
   file: File;
@@ -8,13 +9,14 @@ export type TransferFile = {
   checksum?: string;
   lastUpdateTime: number;
   lastSentBytes: number;
+  peerId?: string; // Which peer this file is going to/from
 };
 
 type TransferState = {
   files: TransferFile[];
   addFiles: (files: File[]) => void;
   updateFileProgress: (fileName: string, sentBytes: number) => void;
-  updateFileStatus: (fileName: string, status: TransferFile['status']) => void;
+  updateFileStatus: (fileName: string, status: TransferFile['status'], peerId?: string) => void;
   setFileChecksum: (fileName: string, checksum: string) => void;
   removeFile: (fileName: string) => void;
   clearFiles: () => void;
@@ -73,20 +75,35 @@ export const useTransferStore = create<TransferState>((set, get) => ({
         }),
       }
     }),
-  updateFileStatus: (fileName: string, status: TransferFile['status']) =>
-    set((state) => ({
-      files: state.files.map((tf) => {
+  updateFileStatus: (fileName: string, status: TransferFile['status'], peerId) =>
+    set((state) => {
+      const { addLog } = useLogStore.getState();
+      const files = state.files.map((tf) => {
         if (tf.file.name === fileName) {
-            const isFinished = status === 'complete' || status === 'error';
-          return { 
+          const isFinished = status === 'complete' || status === 'error';
+          const updatedTf = {
             ...tf, 
             status, 
+            peerId: peerId || tf.peerId,
             speed: isFinished ? 0 : tf.speed,
           };
+          if (isFinished) {
+            addLog({
+              fileName: updatedTf.file.name,
+              fileSize: updatedTf.file.size,
+              fileType: updatedTf.file.type,
+              peerId: updatedTf.peerId || 'Unknown Peer',
+              status: updatedTf.status,
+              timestamp: new Date(),
+              direction: 'sent' // This needs to be dynamic
+            });
+          }
+          return updatedTf;
         }
         return tf;
-      }),
-    })),
+      });
+      return { files };
+    }),
   setFileChecksum: (fileName: string, checksum: string) =>
     set((state) => ({
         files: state.files.map((tf) => 

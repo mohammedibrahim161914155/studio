@@ -62,7 +62,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           if(!get().activePeer) {
             const newPeerInfo = {id: peerId, name: 'New Peer', offer: data, status: 'connecting' as const};
             addPeer(newPeerInfo);
-            set({activePeer: newPeerInfo});
+            set({activePeer: newPeerInfo as PeerInfo});
           }
       } else if (data.type === 'answer') {
          if (get().activePeer) {
@@ -82,16 +82,24 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     newPeer.on('data', async (data) => {
       try {
         const message: PeerMessage = JSON.parse(data.toString());
-        const { addFiles, updateFileProgress, updateFileStatus, getFile, setFileChecksum } = useTransferStore.getState();
+        const { addFiles, updateFileProgress, updateFileStatus, getFile, setFileChecksum, calculateFileChecksum } = useTransferStore.getState();
+        const { updatePeerName } = usePeerManagerStore.getState();
 
         switch (message.type) {
+          case 'handshake': {
+            const { peerId } = message.payload;
+            if (get().activePeer) {
+              updatePeerName(get().activePeer!.id, peerId)
+            }
+            break;
+          }
           case 'metadata': {
             console.log('Received metadata for:', message.payload.name);
             const { name, size, type, checksum } = message.payload;
             receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size, checksum };
             const placeholderFile = new File([], name, { type });
             addFiles([placeholderFile]);
-            updateFileStatus(name, 'sending');
+            updateFileStatus(name, 'sending', get().activePeer?.id);
             setFileChecksum(name, checksum);
             break;
           }
@@ -99,12 +107,10 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
             if (receivingFiles[name]) {
-              const chunkBuffer = (chunk as unknown as {type: 'Buffer'; data: number[]}).data;
-              const arrayBuffer = new Uint8Array(chunkBuffer).buffer;
+              const arrayBuffer = new Uint8Array(Object.values(chunk)).buffer;
               receivingFiles[name].chunks[chunkIndex] = arrayBuffer;
               receivingFiles[name].receivedSize += arrayBuffer.byteLength;
 
-              const progress = Math.round((receivingFiles[name].receivedSize / receivingFiles[name].totalSize) * 100);
               updateFileProgress(name, receivingFiles[name].receivedSize);
 
               // Check if all chunks are received
@@ -112,15 +118,15 @@ export const usePeerStore = create<PeerState>((set, get) => ({
               if (receivedChunksCount === totalChunks) {
                  const fileBlob = new Blob(receivingFiles[name].chunks, { type: receivingFiles[name].type });
                  
-                 updateFileStatus(name, 'verifying');
-                 const receivedChecksum = await useTransferStore.getState().calculateFileChecksum(fileBlob);
+                 updateFileStatus(name, 'verifying', get().activePeer?.id);
+                 const receivedChecksum = await calculateFileChecksum(fileBlob);
                  
                  if (receivedChecksum === receivingFiles[name].checksum) {
-                    updateFileStatus(name, 'complete');
+                    updateFileStatus(name, 'complete', get().activePeer?.id);
                     get().send({ type: 'transfer-verified', payload: { name } });
                  } else {
                     console.error(`Checksum mismatch for ${name}`);
-                    updateFileStatus(name, 'error');
+                    updateFileStatus(name, 'error', get().activePeer?.id);
                  }
 
                  delete receivingFiles[name];
@@ -131,7 +137,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
           case 'transfer-verified':
             console.log('Transfer verified for:', message.payload.name);
-            updateFileStatus(message.payload.name, 'complete');
+            updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);
             break;
         }
       } catch (error) {
@@ -197,7 +203,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     const newPeerInfo = { id: peerId, name: 'New Peer', offer, status: 'connecting' as const };
     addPeer(newPeerInfo);
 
-    const peer = get().createPeer(false, newPeerInfo);
+    const peer = get().createPeer(false, newPeerInfo as PeerInfo);
     peer.signal(offer); // This will trigger our peer to generate an answer
   }
 }));

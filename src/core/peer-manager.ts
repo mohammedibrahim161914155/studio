@@ -7,6 +7,7 @@ export type Peer = {
     id: string;
     name: string;
     status: 'connected' | 'disconnected' | 'connecting' | 'error';
+    trusted: boolean;
     offer?: SignalData;
     answer?: SignalData;
 };
@@ -14,11 +15,12 @@ export type Peer = {
 type PeerManagerState = {
     myId: string;
     peers: Peer[];
-    addPeer: (peer: Peer) => void;
+    addPeer: (peer: Omit<Peer, 'trusted'>) => void;
     removePeer: (peerId: string) => void;
     updatePeerName: (peerId: string, name: string) => void;
     updatePeerStatus: (peerId: string, status: Peer['status']) => void;
     updatePeerSignal: (peerId: string, signal: SignalData) => void;
+    updatePeerTrusted: (peerId: string, trusted: boolean) => void;
     getPeer: (peerId: string) => Peer | undefined;
 };
 
@@ -29,7 +31,8 @@ export const usePeerManagerStore = create(
             peers: [],
             addPeer: (peer) => {
                 if (get().peers.find(p => p.id === peer.id)) return; // Avoid duplicates
-                set((state) => ({ peers: [...state.peers, peer] }));
+                const newPeer = { ...peer, trusted: false };
+                set((state) => ({ peers: [...state.peers, newPeer] }));
             },
             removePeer: (peerId) => {
                 set((state) => ({ peers: state.peers.filter((p) => p.id !== peerId) }));
@@ -53,6 +56,11 @@ export const usePeerManagerStore = create(
                         }
                         return p;
                     }),
+                }));
+            },
+            updatePeerTrusted: (peerId, trusted) => {
+                set(state => ({
+                    peers: state.peers.map(p => p.id === peerId ? { ...p, trusted } : p)
                 }));
             },
             getPeer: (peerId) => {
