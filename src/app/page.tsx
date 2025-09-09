@@ -1,9 +1,9 @@
-import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
-import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/shadcn/sidebar";
 import { Header } from "@/components/layout/header";
 import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
 import { DeviceList } from "@/components/device-list";
+import { SidebarNav } from "@/components/layout/sidebar-nav";
 
 export default function Home() {
   return (
