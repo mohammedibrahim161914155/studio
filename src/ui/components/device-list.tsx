@@ -1,9 +1,9 @@
 'use client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
+import { Avatar, AvatarFallback } from "@/ui/avatar";
 import { cn } from "@/lib/utils";
 import { usePeerStore } from "@/connection/peer";
-import { Wifi, WifiOff, Loader } from "lucide-react";
+import { Wifi, WifiOff, Loader2 } from "lucide-react";
 
 export function DeviceList() {
   const { status } = usePeerStore();
@@ -15,13 +15,13 @@ export function DeviceList() {
           message: "Remote Peer", 
           desc: "Ready for transfer.",
           icon: <Wifi className="w-5 h-5 text-primary" />,
-          statusClass: 'bg-primary'
+          statusClass: 'bg-green-500'
         };
       case 'connecting':
         return { 
           message: "Connecting...", 
           desc: "Waiting for peer response.",
-          icon: <Loader className="w-5 h-5 text-muted-foreground animate-spin" />,
+          icon: <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />,
           statusClass: 'bg-yellow-500'
         };
       case 'error':
@@ -47,7 +47,7 @@ export function DeviceList() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Active Peer</CardTitle>
+        <CardTitle className="text-h2">Active Peer</CardTitle>
         <CardDescription>The device you are connected to.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -58,16 +58,16 @@ export function DeviceList() {
         ) : (
           <ul className="space-y-4">
             <li className="flex items-center gap-4">
-              <Avatar>
-                <AvatarFallback>{icon}</AvatarFallback>
+              <Avatar className="h-12 w-12 bg-muted flex items-center justify-center">
+                <AvatarFallback className="bg-transparent">{icon}</AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <p className="text-sm font-medium">{message}</p>
-                <p className="text-xs text-muted-foreground">{desc}</p>
+                <p className="font-medium">{message}</p>
+                <p className="text-sm-text text-muted-foreground">{desc}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className={cn("h-2 w-2 rounded-full", statusClass)}></span>
-                <span className="text-sm text-muted-foreground capitalize">{status}</span>
+                <span className={cn("h-2.5 w-2.5 rounded-full", statusClass)}></span>
+                <span className="text-sm-text text-muted-foreground capitalize">{status}</span>
               </div>
             </li>
           </ul>

@@ -1,4 +1,4 @@
-import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
@@ -13,10 +13,10 @@ export default function Home() {
           <SidebarNav />
         </Sidebar>
         <div className="flex flex-col">
-          <SidebarInset className="flex flex-col">
+          <SidebarInset>
             <Header />
-            <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-8">
-              <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <div className="lg:col-span-2">
                   <FileDropzone />
                 </div>

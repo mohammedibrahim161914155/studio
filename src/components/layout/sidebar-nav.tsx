@@ -25,7 +25,7 @@ export function SidebarNav() {
       <SidebarHeader>
         <div className="flex items-center gap-3 p-2">
           <Shield className="w-8 h-8 text-primary" />
-          <h1 className="text-xl font-headline font-bold">BlackWire</h1>
+          <h1 className="text-h1 font-headline">BlackWire</h1>
         </div>
       </SidebarHeader>
       <SidebarContent className="p-2 flex-1">
@@ -93,7 +93,7 @@ export function SidebarNav() {
         </SidebarMenu>
         <div className="flex items-center gap-3 p-2 mt-2 rounded-lg bg-muted/50">
           <Avatar>
-            <AvatarImage src="https://picsum.photos/40/40" width={40} height={40} data-ai-hint="person avatar" />
+            <AvatarImage src="https://picsum.photos/40/40" width={40} height={40} data-ai-hint="person avatar" alt="User Avatar" />
             <AvatarFallback>U</AvatarFallback>
           </Avatar>
           <div className="flex flex-col overflow-hidden">

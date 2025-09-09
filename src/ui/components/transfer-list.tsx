@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useTransferStore } from "@/core/transfer";
 import { TransferListItem } from "./transfer-list-item";
 
@@ -11,17 +11,17 @@ export function TransferList() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Transfer Queue</CardTitle>
+        <CardTitle className="text-h2">Transfer Queue</CardTitle>
         <CardDescription>Files ready to be sent to your peer.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50%]">File</TableHead>
+              <TableHead className="w-[50%] pl-6">File</TableHead>
               <TableHead>Size</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right pr-6">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

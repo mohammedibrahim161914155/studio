@@ -3,7 +3,7 @@
 import { TableCell, TableRow } from "@/ui/table";
 import { Progress } from "@/ui/progress";
 import { Button } from "@/ui/button";
-import { Trash2, File, Folder } from "lucide-react";
+import { Trash2, File } from "lucide-react";
 import { TransferFile, useTransferStore } from "@/core/transfer";
 import { Badge } from "@/ui/badge";
 
@@ -26,7 +26,7 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
 
   const getStatusBadgeVariant = () => {
     switch(transfer.status) {
-      case 'complete': return 'default';
+      case 'complete': return 'success';
       case 'sending': return 'secondary';
       case 'error': return 'destructive';
       default: return 'outline';
@@ -34,24 +34,26 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
   }
 
   return (
-    <TableRow>
-      <TableCell>
-        <div className="flex items-center gap-3">
-          <File className="w-5 h-5 text-muted-foreground" />
+    <TableRow className="transition-colors hover:bg-muted/50">
+      <TableCell className="w-[50%]">
+        <div className="flex items-center gap-4">
+          <File className="w-5 h-5 text-muted-foreground flex-shrink-0" />
           <div className="flex-1 overflow-hidden">
-            <p className="font-medium truncate">{transfer.file.name}</p>
-            <Progress value={transfer.progress} className="h-2 mt-1" />
+            <p className="font-medium truncate text-body-text">{transfer.file.name}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <Progress value={transfer.progress} className="h-1.5 flex-1" />
+              <span className="text-xs text-muted-foreground font-mono w-12 text-right">{transfer.progress}%</span>
+            </div>
           </div>
         </div>
       </TableCell>
-      <TableCell className="font-code">{formatBytes(transfer.file.size)}</TableCell>
+      <TableCell className="font-code text-sm-text">{formatBytes(transfer.file.size)}</TableCell>
       <TableCell>
-        <Badge variant={getStatusBadgeVariant()} className="capitalize">{transfer.status}</Badge>
+        <Badge variant={getStatusBadgeVariant()} className="capitalize text-xs">{transfer.status}</Badge>
       </TableCell>
       <TableCell className="text-right">
-        <Button variant="ghost" size="icon" onClick={() => removeFile(transfer.file.name)}>
+        <Button variant="ghost" size="icon" onClick={() => removeFile(transfer.file.name)} aria-label={`Remove ${transfer.file.name} from queue`}>
           <Trash2 className="h-4 w-4" />
-          <span className="sr-only">Remove</span>
         </Button>
       </TableCell>
     </TableRow>

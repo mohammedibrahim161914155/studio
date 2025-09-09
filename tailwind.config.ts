@@ -4,13 +4,20 @@ export default {
   darkMode: ['class'],
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/ui/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
+      fontSize: {
+        'h1': ['24px', { fontWeight: '700', lineHeight: '1.2' }],
+        'h2': ['20px', { fontWeight: '600', lineHeight: '1.2' }],
+        'body-text': ['16px', { fontWeight: '400', lineHeight: '1.5' }],
+        'sm-text': ['14px', { fontWeight: '400', lineHeight: '1.5' }],
+      },
       fontFamily: {
-        body: ["'Inter'", 'sans-serif'],
+        sans: ["'Inter'", 'sans-serif'],
         headline: ["'Space Grotesk'", 'sans-serif'],
         code: ["'Source Code Pro'", 'monospace'],
       },
@@ -67,9 +74,10 @@ export default {
         },
       },
       borderRadius: {
+        xl: "calc(var(--radius) + 4px)",
         lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+        md: 'calc(var(--radius) - 4px)',
+        sm: 'calc(var(--radius) - 8px)',
       },
       keyframes: {
         'accordion-down': {
