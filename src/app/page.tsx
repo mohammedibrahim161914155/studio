@@ -1,4 +1,4 @@
-import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
