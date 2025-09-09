@@ -5,7 +5,6 @@ import { Progress } from "@/ui/progress";
 import { Button } from "@/ui/button";
 import { Trash2, File, CheckCircle2, AlertTriangle, ShieldCheck, Hourglass } from "lucide-react";
 import { TransferFile, useTransferStore } from "@/core/transfer";
-import { Badge } from "@/ui/badge";
 
 interface TransferListItemProps {
   transfer: TransferFile;
@@ -30,7 +29,7 @@ const StatusInfo = ({ status }: { status: TransferFile['status'] }) => {
         case 'verifying':
             return <><Hourglass className="w-4 h-4 text-yellow-500 animate-spin" /> <span>Verifying...</span></>;
         case 'sending':
-            return <><ShieldCheck className="w-4 h-4 text-sky-500" /> <span>Sending...</span></>;
+            return <><ShieldCheck className="w-4 h-4 text-sky-500" /> <span>Sending</span></>;
         default:
              return <><ShieldCheck className="w-4 h-4 text-muted-foreground" /> <span>Pending</span></>;
     }
@@ -40,15 +39,7 @@ const StatusInfo = ({ status }: { status: TransferFile['status'] }) => {
 export function TransferListItem({ transfer }: TransferListItemProps) {
   const removeFile = useTransferStore(state => state.removeFile);
 
-  const getStatusBadgeVariant = () => {
-    switch(transfer.status) {
-      case 'complete': return 'success';
-      case 'sending': return 'secondary';
-      case 'verifying': return 'secondary';
-      case 'error': return 'destructive';
-      default: return 'outline';
-    }
-  }
+  const transferSpeed = transfer.speed > 0 ? `${formatBytes(transfer.speed)}/s` : '';
 
   return (
     <TableRow className="transition-colors hover:bg-muted/50">
@@ -64,7 +55,10 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
           </div>
         </div>
       </TableCell>
-      <TableCell className="font-code text-sm-text">{formatBytes(transfer.file.size)}</TableCell>
+      <TableCell className="font-code text-sm-text">
+        <div>{formatBytes(transfer.file.size)}</div>
+        <div className="text-xs text-muted-foreground h-4">{transfer.status === 'sending' ? transferSpeed : ''}</div>
+      </TableCell>
       <TableCell>
         <div className="flex items-center gap-2 text-sm-text">
             <StatusInfo status={transfer.status} />

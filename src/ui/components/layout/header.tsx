@@ -56,7 +56,7 @@ export function Header() {
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         let sentBytes = 0;
         for (let i = 0; i < totalChunks; i++) {
-            if (get().status !== 'connected') {
+            if (usePeerStore.getState().status !== 'connected') {
                 toast({ variant: 'destructive', title: 'Transfer Interrupted', description: 'Connection lost. Please reconnect.' });
                 updateFileStatus(file.name, 'error');
                 break;
@@ -77,8 +77,7 @@ export function Header() {
             });
             
             sentBytes += arrayBuffer.byteLength;
-            const progress = Math.round((sentBytes / file.size) * 100);
-            updateFileProgress(file.name, progress);
+            updateFileProgress(file.name, sentBytes);
         }
     }
   };

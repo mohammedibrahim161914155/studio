@@ -6,12 +6,14 @@ export type TransferFile = {
   status: 'pending' | 'sending' | 'paused' | 'complete' | 'error' | 'verifying';
   speed: number; // in bytes per second
   checksum?: string;
+  lastUpdateTime: number;
+  lastSentBytes: number;
 };
 
 type TransferState = {
   files: TransferFile[];
   addFiles: (files: File[]) => void;
-  updateFileProgress: (fileName: string, progress: number) => void;
+  updateFileProgress: (fileName: string, sentBytes: number) => void;
   updateFileStatus: (fileName: string, status: TransferFile['status']) => void;
   setFileChecksum: (fileName: string, checksum: string) => void;
   removeFile: (fileName: string) => void;
@@ -39,19 +41,32 @@ export const useTransferStore = create<TransferState>((set, get) => ({
           progress: 0,
           status: 'pending',
           speed: 0,
+          lastUpdateTime: 0,
+          lastSentBytes: 0,
         }));
       return { files: [...state.files, ...newTransferFiles] };
     }),
-  updateFileProgress: (fileName: string, progress: number) =>
+  updateFileProgress: (fileName: string, sentBytes: number) =>
     set((state) => {
-      // This is a simplified speed calculation. For more accuracy, a moving average would be better.
       const now = Date.now();
       return {
         files: state.files.map((tf) => {
           if (tf.file.name === fileName) {
+            const progress = Math.round((sentBytes / tf.file.size) * 100);
+            const timeDiff = now - tf.lastUpdateTime;
+            let speed = tf.speed;
+            // Calculate speed only if time diff is meaningful to avoid Infinity
+            if (timeDiff > 100) {
+                 const bytesDiff = sentBytes - tf.lastSentBytes;
+                 speed = bytesDiff / (timeDiff / 1000); // bytes per second
+            }
+
             return { 
               ...tf, 
               progress,
+              speed: speed > 0 ? speed : tf.speed, // Keep last known speed if current is 0
+              lastUpdateTime: now,
+              lastSentBytes: sentBytes,
             };
           }
           return tf;
@@ -62,9 +77,11 @@ export const useTransferStore = create<TransferState>((set, get) => ({
     set((state) => ({
       files: state.files.map((tf) => {
         if (tf.file.name === fileName) {
+            const isFinished = status === 'complete' || status === 'error';
           return { 
             ...tf, 
             status, 
+            speed: isFinished ? 0 : tf.speed,
           };
         }
         return tf;
