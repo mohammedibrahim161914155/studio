@@ -1,9 +1,9 @@
 'use client';
-import { SidebarTrigger } from "@/ui/shadcn/sidebar";
-import { ThemeToggle } from "@/ui/components/theme-toggle";
-import { ShareLinkDialog } from "@/ui/components/share-link-dialog";
-import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
-import { Button } from "@/ui/shadcn/button";
+import { SidebarTrigger } from "@/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { ShareLinkDialog } from "@/components/share-link-dialog";
+import { QrCodeDialog } from "@/components/qr-code-dialog";
+import { Button } from "@/ui/button";
 import { Send } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
 import { useTransferStore } from "@/core/transfer";

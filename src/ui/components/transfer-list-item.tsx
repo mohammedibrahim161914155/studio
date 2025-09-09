@@ -1,11 +1,11 @@
 "use client";
 
-import { TableCell, TableRow } from "@/ui/shadcn/table";
-import { Progress } from "@/ui/shadcn/progress";
-import { Button } from "@/ui/shadcn/button";
+import { TableCell, TableRow } from "@/ui/table";
+import { Progress } from "@/ui/progress";
+import { Button } from "@/ui/button";
 import { Trash2, File, Folder } from "lucide-react";
 import { TransferFile, useTransferStore } from "@/core/transfer";
-import { Badge } from "@/ui/shadcn/badge";
+import { Badge } from "@/ui/badge";
 
 interface TransferListItemProps {
   transfer: TransferFile;

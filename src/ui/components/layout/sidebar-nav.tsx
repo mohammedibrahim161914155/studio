@@ -12,9 +12,9 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
-} from "@/ui/shadcn/sidebar";
-import { Separator } from "@/ui/shadcn/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/ui/shadcn/avatar";
+} from "@/ui/sidebar";
+import { Separator } from "@/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 
 export function SidebarNav() {
   const pathname = usePathname();

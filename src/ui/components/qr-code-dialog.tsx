@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from "react";
-import { Button } from "@/ui/shadcn/button";
+import { Button } from "@/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,13 +9,13 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-} from "@/ui/shadcn/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/shadcn/tabs";
+} from "@/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { QrCode, ScanLine } from "lucide-react";
 import QRCode from "qrcode.react";
 import { usePeerStore } from "@/connection/peer";
-import { Textarea } from "@/ui/shadcn/textarea";
-import { Label } from "@/ui/shadcn/label";
+import { Textarea } from "@/ui/textarea";
+import { Label } from "@/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { SignalData } from "simple-peer";
 

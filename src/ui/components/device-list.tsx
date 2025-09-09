@@ -1,6 +1,6 @@
 'use client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/shadcn/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/ui/shadcn/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 import { cn } from "@/lib/utils";
 import { usePeerStore } from "@/connection/peer";
 import { Wifi, WifiOff, Loader } from "lucide-react";

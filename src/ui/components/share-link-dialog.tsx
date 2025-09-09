@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@/ui/shadcn/button";
+import { Button } from "@/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,10 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/ui/shadcn/dialog";
-import { Input } from "@/ui/shadcn/input";
-import { Label } from "@/ui/shadcn/label";
-import { Switch } from "@/ui/shadcn/switch";
+} from "@/ui/dialog";
+import { Input } from "@/ui/input";
+import { Label } from "@/ui/label";
+import { Switch } from "@/ui/switch";
 import { Link as LinkIcon, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Card, CardContent } from "@/ui/shadcn/card";
+import { Card, CardContent } from "@/ui/card";
 import { UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTransferStore } from '@/core/transfer';
