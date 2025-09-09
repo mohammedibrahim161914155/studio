@@ -99,12 +99,13 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
             if (receivingFiles[name]) {
-              const chunkBuffer = new Uint8Array(Object.values(chunk)).buffer;
-              receivingFiles[name].chunks[chunkIndex] = chunkBuffer;
-              receivingFiles[name].receivedSize += chunkBuffer.byteLength;
+              const chunkBuffer = (chunk as unknown as {type: 'Buffer'; data: number[]}).data;
+              const arrayBuffer = new Uint8Array(chunkBuffer).buffer;
+              receivingFiles[name].chunks[chunkIndex] = arrayBuffer;
+              receivingFiles[name].receivedSize += arrayBuffer.byteLength;
 
               const progress = Math.round((receivingFiles[name].receivedSize / receivingFiles[name].totalSize) * 100);
-              updateFileProgress(name, progress);
+              updateFileProgress(name, receivingFiles[name].receivedSize);
 
               // Check if all chunks are received
               const receivedChunksCount = Object.values(receivingFiles[name].chunks).filter(Boolean).length;
