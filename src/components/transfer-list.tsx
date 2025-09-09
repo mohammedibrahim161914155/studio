@@ -7,11 +7,21 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Pause, Play, Trash2, File, Folder } from "lucide-react";
 
-const initialTransfers = [
-  { id: 1, name: "project_files.zip", type: "file", size: "1.2 GB", progress: 30, status: "sending" },
-  { id: 2, name: "kyber-dilithium-impl.pdf", type: "file", size: "2.5 MB", progress: 85, status: "sending" },
-  { id: 3, name: "summer_vacation_photos", type: "folder", size: "4.8 GB", progress: 10, status: "paused" },
-  { id: 4, name: "presentation.pptx", type: "file", size: "150 MB", progress: 100, status: "complete" },
+type Transfer = {
+  id: number;
+  name: string;
+  type: "file" | "folder";
+  size: string;
+  progress: number;
+  status: "sending" | "paused" | "complete";
+};
+
+
+const initialTransfers: Transfer[] = [
+  // { id: 1, name: "project_files.zip", type: "file", size: "1.2 GB", progress: 30, status: "sending" },
+  // { id: 2, name: "kyber-dilithium-impl.pdf", type: "file", size: "2.5 MB", progress: 85, status: "sending" },
+  // { id: 3, name: "summer_vacation_photos", type: "folder", size: "4.8 GB", progress: 10, status: "paused" },
+  // { id: 4, name: "presentation.pptx", type: "file", size: "150 MB", progress: 100, status: "complete" },
 ];
 
 export function TransferList() {
@@ -20,6 +30,7 @@ export function TransferList() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     
+    // This is a mock progress update. In a real app, this would be driven by WebRTC data channel progress events.
     const interval = setInterval(() => {
       setTransfers((prevTransfers) =>
         prevTransfers.map((t) => {
