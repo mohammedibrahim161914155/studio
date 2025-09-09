@@ -3,7 +3,7 @@
 import { TableCell, TableRow } from "@/ui/table";
 import { Progress } from "@/ui/progress";
 import { Button } from "@/ui/button";
-import { Trash2, File } from "lucide-react";
+import { Trash2, File, CheckCircle2, AlertTriangle, ShieldCheck, Hourglass } from "lucide-react";
 import { TransferFile, useTransferStore } from "@/core/transfer";
 import { Badge } from "@/ui/badge";
 
@@ -21,20 +21,19 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-const formatSpeed = (bytes: number) => {
-    if (bytes === 0) return '0 B/s';
-    const k = 1024;
-    const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-const formatEta = (bytesRemaining: number, speed: number) => {
-    if (speed === 0 || bytesRemaining === 0) return '~';
-    const seconds = Math.ceil(bytesRemaining / speed);
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
-    return `${Math.ceil(seconds / 3600)}h`;
+const StatusInfo = ({ status }: { status: TransferFile['status'] }) => {
+    switch (status) {
+        case 'complete':
+            return <><CheckCircle2 className="w-4 h-4 text-green-500" /> <span className="text-green-500">Verified</span></>;
+        case 'error':
+            return <><AlertTriangle className="w-4 h-4 text-destructive" /> <span className="text-destructive">Error</span></>;
+        case 'verifying':
+            return <><Hourglass className="w-4 h-4 text-yellow-500 animate-spin" /> <span>Verifying...</span></>;
+        case 'sending':
+            return <><ShieldCheck className="w-4 h-4 text-sky-500" /> <span>Sending...</span></>;
+        default:
+             return <><ShieldCheck className="w-4 h-4 text-muted-foreground" /> <span>Pending</span></>;
+    }
 }
 
 
@@ -45,12 +44,11 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
     switch(transfer.status) {
       case 'complete': return 'success';
       case 'sending': return 'secondary';
+      case 'verifying': return 'secondary';
       case 'error': return 'destructive';
       default: return 'outline';
     }
   }
-
-  const bytesRemaining = transfer.file.size * (1 - transfer.progress / 100);
 
   return (
     <TableRow className="transition-colors hover:bg-muted/50">
@@ -63,16 +61,14 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
               <Progress value={transfer.progress} className="h-1.5 flex-1" />
               <span className="text-xs text-muted-foreground font-mono w-12 text-right">{transfer.progress}%</span>
             </div>
-             <div className="flex items-center justify-between mt-1">
-                <span className="text-xs text-muted-foreground font-mono">{formatSpeed(transfer.speed)}</span>
-                <span className="text-xs text-muted-foreground font-mono">ETA: {formatEta(bytesRemaining, transfer.speed)}</span>
-             </div>
           </div>
         </div>
       </TableCell>
       <TableCell className="font-code text-sm-text">{formatBytes(transfer.file.size)}</TableCell>
       <TableCell>
-        <Badge variant={getStatusBadgeVariant()} className="capitalize text-xs">{transfer.status}</Badge>
+        <div className="flex items-center gap-2 text-sm-text">
+            <StatusInfo status={transfer.status} />
+        </div>
       </TableCell>
       <TableCell className="text-right">
         <Button variant="ghost" size="icon" onClick={() => removeFile(transfer.file.name)} aria-label={`Remove ${transfer.file.name} from queue`}>

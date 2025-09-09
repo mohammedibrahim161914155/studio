@@ -9,9 +9,10 @@ export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 // Define a structured message type for communication
 export type PeerMessage = 
   | { type: 'handshake'; payload: { message: string, peerId: string } }
-  | { type: 'metadata'; payload: { name: string; size: number; type: string; } }
+  | { type: 'metadata'; payload: { name: string; size: number; type: string; checksum: string; } }
   | { type: 'chunk'; payload: { name: string; chunk: ArrayBuffer; chunkIndex: number; totalChunks: number; } }
   | { type: 'transfer-complete'; payload: { name: string; } }
+  | { type: 'transfer-verified'; payload: { name: string; } }
   | { type: 'progress'; payload: { name: string; progress: number; } };
 
 
@@ -31,7 +32,7 @@ type PeerState = {
 };
 
 // Store for incoming file chunks
-const receivingFiles: { [fileName: string]: { chunks: ArrayBuffer[], type: string, receivedSize: number, totalSize: number } } = {};
+const receivingFiles: { [fileName: string]: { chunks: ArrayBuffer[], type: string, receivedSize: number, totalSize: number, checksum: string } } = {};
 
 export const usePeerStore = create<PeerState>((set, get) => ({
   peer: null,
@@ -71,25 +72,28 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
     newPeer.on('connect', () => {
       set({ status: 'connected' });
-      usePeerManagerStore.getState().updatePeerStatus(get().activePeer!.id, 'connected');
+      if (get().activePeer) {
+        usePeerManagerStore.getState().updatePeerStatus(get().activePeer!.id, 'connected');
+      }
       get().send({ type: 'handshake', payload: { message: 'Hello!', peerId: usePeerManagerStore.getState().myId } });
     });
 
-    newPeer.on('data', (data) => {
+    newPeer.on('data', async (data) => {
       try {
         const message: PeerMessage = JSON.parse(data.toString());
-        const { addFiles, updateFileProgress, updateFileStatus, startReceiving, endReceiving } = useTransferStore.getState();
+        const { addFiles, updateFileProgress, updateFileStatus, getFile, setFileChecksum } = useTransferStore.getState();
 
         switch (message.type) {
-          case 'metadata':
+          case 'metadata': {
             console.log('Received metadata for:', message.payload.name);
-            const { name, size, type } = message.payload;
-            receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size };
+            const { name, size, type, checksum } = message.payload;
+            receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size, checksum };
             const placeholderFile = new File([], name, { type });
             addFiles([placeholderFile]);
             updateFileStatus(name, 'sending');
-            startReceiving(name);
+            setFileChecksum(name, checksum);
             break;
+          }
             
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
@@ -101,26 +105,31 @@ export const usePeerStore = create<PeerState>((set, get) => ({
               const progress = Math.round((receivingFiles[name].receivedSize / receivingFiles[name].totalSize) * 100);
               updateFileProgress(name, progress);
 
-              if (Object.keys(receivingFiles[name].chunks).length === totalChunks) {
+              // Check if all chunks are received
+              const receivedChunksCount = Object.values(receivingFiles[name].chunks).filter(Boolean).length;
+              if (receivedChunksCount === totalChunks) {
                  const fileBlob = new Blob(receivingFiles[name].chunks, { type: receivingFiles[name].type });
                  
-                 // Clean up and finalize
+                 updateFileStatus(name, 'verifying');
+                 const receivedChecksum = await useTransferStore.getState().calculateFileChecksum(fileBlob);
+                 
+                 if (receivedChecksum === receivingFiles[name].checksum) {
+                    updateFileStatus(name, 'complete');
+                    get().send({ type: 'transfer-verified', payload: { name } });
+                 } else {
+                    console.error(`Checksum mismatch for ${name}`);
+                    updateFileStatus(name, 'error');
+                 }
+
                  delete receivingFiles[name];
-                 endReceiving(name);
-                 updateFileStatus(name, 'complete');
-                 get().send({ type: 'transfer-complete', payload: { name } });
               }
             }
             break;
           }
 
-          case 'transfer-complete':
-            console.log('Transfer complete for:', message.payload.name);
+          case 'transfer-verified':
+            console.log('Transfer verified for:', message.payload.name);
             updateFileStatus(message.payload.name, 'complete');
-            break;
-            
-          case 'progress':
-            updateFileProgress(message.payload.name, message.payload.progress);
             break;
         }
       } catch (error) {
@@ -163,17 +172,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
   send: (message) => {
     if (get().status === 'connected') {
-      // To handle ArrayBuffer, we need to send it directly for binary data
-      // and stringify for metadata. simple-peer supports this mixed-type.
-      if (message.type === 'chunk') {
-        // This is a simplified approach. A more robust solution might use a buffer
-        // with a header to indicate message type. For simple-peer, we can send JSON
-        // for metadata and ArrayBuffer for chunks.
-        get().peer?.send(JSON.stringify({ type: message.type, payload: { name: message.payload.name, chunkIndex: message.payload.chunkIndex, totalChunks: message.payload.totalChunks }}));
-        get().peer?.send(message.payload.chunk);
-      } else {
         get().peer?.send(JSON.stringify(message));
-      }
     } else {
       console.warn('Cannot send data, peer is not connected.');
     }
