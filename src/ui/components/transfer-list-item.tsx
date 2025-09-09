@@ -21,6 +21,23 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
+const formatSpeed = (bytes: number) => {
+    if (bytes === 0) return '0 B/s';
+    const k = 1024;
+    const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+const formatEta = (bytesRemaining: number, speed: number) => {
+    if (speed === 0 || bytesRemaining === 0) return '~';
+    const seconds = Math.ceil(bytesRemaining / speed);
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
+    return `${Math.ceil(seconds / 3600)}h`;
+}
+
+
 export function TransferListItem({ transfer }: TransferListItemProps) {
   const removeFile = useTransferStore(state => state.removeFile);
 
@@ -33,6 +50,8 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
     }
   }
 
+  const bytesRemaining = transfer.file.size * (1 - transfer.progress / 100);
+
   return (
     <TableRow className="transition-colors hover:bg-muted/50">
       <TableCell className="w-[50%]">
@@ -44,6 +63,10 @@ export function TransferListItem({ transfer }: TransferListItemProps) {
               <Progress value={transfer.progress} className="h-1.5 flex-1" />
               <span className="text-xs text-muted-foreground font-mono w-12 text-right">{transfer.progress}%</span>
             </div>
+             <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-muted-foreground font-mono">{formatSpeed(transfer.speed)}</span>
+                <span className="text-xs text-muted-foreground font-mono">ETA: {formatEta(bytesRemaining, transfer.speed)}</span>
+             </div>
           </div>
         </div>
       </TableCell>

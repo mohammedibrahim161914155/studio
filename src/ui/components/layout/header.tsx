@@ -1,8 +1,8 @@
 'use client';
 import { SidebarTrigger } from "@/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { ShareLinkDialog } from "@/components/share-link-dialog";
-import { QrCodeDialog } from "@/components/qr-code-dialog";
+import { ThemeToggle } from "@/ui/components/theme-toggle";
+import { ShareLinkDialog } from "@/ui/components/share-link-dialog";
+import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
 import { Button } from "@/ui/button";
 import { Send } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
@@ -12,12 +12,12 @@ import { useToast } from "@/hooks/use-toast";
 const CHUNK_SIZE = 64 * 1024; // 64KB
 
 export function Header() {
-  const { status, send } = usePeerStore();
-  const { files, updateFileStatus } = useTransferStore();
+  const { status, send, activePeer } = usePeerStore();
+  const { files, updateFileStatus, updateFileProgress } = useTransferStore();
   const { toast } = useToast();
 
   const handleSend = async () => {
-    if (status !== 'connected') {
+    if (status !== 'connected' || !activePeer) {
       toast({ variant: 'destructive', title: 'Not Connected', description: 'Please connect to a peer before sending files.' });
       return;
     }
@@ -27,13 +27,13 @@ export function Header() {
       return;
     }
 
-    toast({ title: 'Sending Files', description: `Initiating transfer of ${pendingFiles.length} file(s).` });
+    toast({ title: 'Sending Files', description: `Initiating transfer of ${pendingFiles.length} file(s) to ${activePeer.name}.` });
 
     for (const transferFile of pendingFiles) {
       const file = transferFile.file;
       updateFileStatus(file.name, 'sending');
       
-      // 1. Send metadata
+      // 1. Send metadata first
       send({
         type: 'metadata',
         payload: { name: file.name, size: file.size, type: file.type }
@@ -41,13 +41,13 @@ export function Header() {
 
       // 2. Send file in chunks
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      let sentBytes = 0;
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
         const arrayBuffer = await chunk.arrayBuffer();
 
-        // Send chunk data directly. We stringify the metadata for the message.
         send({
           type: 'chunk',
           payload: {
@@ -57,6 +57,10 @@ export function Header() {
             totalChunks: totalChunks,
           }
         });
+        
+        sentBytes += arrayBuffer.byteLength;
+        const progress = Math.round((sentBytes / file.size) * 100);
+        updateFileProgress(file.name, progress);
       }
     }
   };
@@ -73,12 +77,12 @@ export function Header() {
         <QrCodeDialog />
         <ShareLinkDialog />
         <Button 
-          className="bg-accent hover:bg-accent/90 text-accent-foreground"
+          variant="accent"
           onClick={handleSend}
           disabled={status !== 'connected' || filesToSend.length === 0}
         >
-          <Send className="mr-2 h-4 w-4" />
-          Send {filesToSend.length > 0 ? `(${filesToSend.length})` : ''}
+          <Send />
+          <span>Send {filesToSend.length > 0 ? `(${filesToSend.length})` : ''}</span>
         </Button>
         <ThemeToggle />
       </div>
