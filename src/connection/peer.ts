@@ -25,8 +25,8 @@ type PeerState = {
   destroyPeer: () => void;
   signal: (data: SignalData) => void;
   send: (data: PeerMessage) => void;
+  connectFromOffer: (offer: SignalData, fromPeerId?: string) => void;
   connectToPeer: (peerInfo: PeerInfo) => void;
-  handleIncomingOffer: (offer: SignalData, fromPeerId?: string) => void;
   currentOffer: SignalData | null;
   setCurrentOffer: (offer: SignalData | null) => void;
 };
@@ -54,19 +54,20 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     set({ peer: newPeer });
 
     newPeer.on('signal', (data) => {
-      // For initiator, this is the offer. For receiver, this is the answer.
       const {addPeer, updatePeerSignal} = usePeerManagerStore.getState();
-      const newPeerId = get().activePeer?.id || `peer_${Date.now()}`;
-
+      const peerId = get().activePeer?.id || `peer_${Date.now()}`;
+      
       if (data.type === 'offer') {
           set({ currentOffer: data });
           if(!get().activePeer) {
-            addPeer({id: newPeerId, name: 'New Peer', offer: data, status: 'connecting'});
-            set({activePeer: {id: newPeerId, name: 'New Peer', offer: data, status: 'connecting'}});
+            const newPeerInfo = {id: peerId, name: 'New Peer', offer: data, status: 'connecting' as const};
+            addPeer(newPeerInfo);
+            set({activePeer: newPeerInfo});
           }
       } else if (data.type === 'answer') {
-          // Receiver has generated an answer, it needs to be sent back to the initiator
-          // This part is handled by UI (copy/paste)
+         if (get().activePeer) {
+           updatePeerSignal(get().activePeer!.id, data);
+         }
       }
     });
 
@@ -98,7 +99,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
             if (receivingFiles[name]) {
-              const chunkBuffer = new Uint8Array(chunk).buffer;
+              const chunkBuffer = new Uint8Array(Object.values(chunk)).buffer;
               receivingFiles[name].chunks[chunkIndex] = chunkBuffer;
               receivingFiles[name].receivedSize += chunkBuffer.byteLength;
 
@@ -142,7 +143,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
       if (activePeerId) {
         usePeerManagerStore.getState().updatePeerStatus(activePeerId, 'disconnected');
       }
-      set({ status: 'disconnected', peer: null, activePeer: null });
+      set({ status: 'disconnected', peer: null, activePeer: null, currentOffer: null, isInitiator: false });
     });
 
     newPeer.on('error', (err) => {
@@ -172,7 +173,12 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
   send: (message) => {
     if (get().status === 'connected') {
-        get().peer?.send(JSON.stringify(message));
+        const payload = message.payload as any;
+        const processedPayload = { ...payload };
+        if (payload.chunk instanceof ArrayBuffer) {
+            processedPayload.chunk = Array.from(new Uint8Array(payload.chunk));
+        }
+        get().peer?.send(JSON.stringify({ ...message, payload: processedPayload }));
     } else {
       console.warn('Cannot send data, peer is not connected.');
     }
@@ -181,30 +187,16 @@ export const usePeerStore = create<PeerState>((set, get) => ({
   connectToPeer: (peerInfo) => {
     if (!peerInfo.offer) return;
     const peer = get().createPeer(false, peerInfo);
-    peer.signal(peerInfo.offer); // Signal the offer to our newly created peer
-    
-    peer.on('signal', (answer) => {
-        if(answer.type === 'answer') {
-            // Now we need to get this `answer` signal back to the initiating peer.
-            // In a real app, this would be via a signaling server.
-            // Here, we'll have to rely on the user to copy-paste it.
-            usePeerManagerStore.getState().updatePeerSignal(peerInfo.id, answer);
-        }
-    });
+    peer.signal(peerInfo.offer);
   },
 
-  handleIncomingOffer: (offer, fromPeerId) => {
+  connectFromOffer: (offer, fromPeerId) => {
     const peerId = fromPeerId || `peer_${Date.now()}`;
-    const { addPeer, updatePeerSignal } = usePeerManagerStore.getState();
-    addPeer({ id: peerId, name: 'New Peer', offer, status: 'connecting' });
+    const { addPeer } = usePeerManagerStore.getState();
+    const newPeerInfo = { id: peerId, name: 'New Peer', offer, status: 'connecting' as const };
+    addPeer(newPeerInfo);
 
-    const peer = get().createPeer(false, {id: peerId, name: 'New Peer', offer, status: 'connecting'});
+    const peer = get().createPeer(false, newPeerInfo);
     peer.signal(offer); // This will trigger our peer to generate an answer
-    
-    peer.on('signal', (answer) => {
-        if (answer.type === 'answer') {
-            updatePeerSignal(peerId, answer);
-        }
-    });
   }
 }));

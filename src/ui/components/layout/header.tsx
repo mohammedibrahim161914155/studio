@@ -56,6 +56,11 @@ export function Header() {
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         let sentBytes = 0;
         for (let i = 0; i < totalChunks; i++) {
+            if (get().status !== 'connected') {
+                toast({ variant: 'destructive', title: 'Transfer Interrupted', description: 'Connection lost. Please reconnect.' });
+                updateFileStatus(file.name, 'error');
+                break;
+            }
             const start = i * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, file.size);
             const chunk = file.slice(start, end);
@@ -84,7 +89,7 @@ export function Header() {
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
       <SidebarTrigger className="md:hidden" />
       <div className="flex-1">
-        <h1 className="text-lg font-headline font-semibold">File Transfer</h1>
+        <h1 className="text-h1">File Transfer</h1>
       </div>
       <div className="flex items-center gap-2">
         <QrCodeDialog />

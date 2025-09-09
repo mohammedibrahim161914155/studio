@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogClose
 } from "@/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { QrCode, ScanLine, Loader2, Copy } from "lucide-react";
@@ -23,66 +24,81 @@ import { usePeerManagerStore } from "@/core/peer-manager";
 export function QrCodeDialog() {
   const [open, setOpen] = useState(false);
   const { 
-    peer, 
     createPeer, 
-    isInitiator, 
     signal, 
     status,
     activePeer,
     currentOffer,
     setCurrentOffer,
-    destroyPeer
+    destroyPeer,
+    connectFromOffer,
   } = usePeerStore();
-  const { updatePeerSignal, getPeer } = usePeerManagerStore();
+  const { getPeer, updatePeerSignal } = usePeerManagerStore();
 
   const [pastedSignal, setPastedSignal] = useState("");
   const { toast } = useToast();
 
   const activePeerDetails = activePeer ? getPeer(activePeer.id) : null;
-  const answerSignal = activePeerDetails?.answer ? JSON.stringify(activePeerDetails.answer) : "";
+  const offerSignalString = currentOffer ? JSON.stringify(currentOffer) : "";
+  const answerSignalString = activePeerDetails?.answer ? JSON.stringify(activePeerDetails.answer) : "";
 
+  // Effect to manage state when dialog opens/closes
   useEffect(() => {
-    // Reset state on dialog close
     if(!open) {
       setPastedSignal("");
-      setCurrentOffer(null);
-      // If we're just creating an offer but not connecting, destroy the temporary peer
-      if(status === 'connecting' && !activePeer) {
+      // Clean up temporary peer/offer if connection wasn't established
+      if (status !== 'connected' && currentOffer) {
         destroyPeer();
       }
+      setCurrentOffer(null);
     }
-  }, [open, status, activePeer, destroyPeer, setCurrentOffer]);
+  }, [open, status, currentOffer, destroyPeer, setCurrentOffer]);
+
+  // Effect to close dialog on successful connection
+  useEffect(() => {
+    if(status === 'connected') {
+        toast({
+            title: "Successfully Connected!",
+            description: `You are now connected to ${activePeer?.name || 'your peer'}.`,
+        });
+        setTimeout(() => setOpen(false), 1000);
+    }
+  }, [status, toast, activePeer]);
+
 
   const handleCreateOffer = () => {
     destroyPeer();
-    const tempPeer = createPeer(true);
+    createPeer(true);
   };
-
-  const handleConnect = () => {
+  
+  const handleConnectWithOffer = () => {
     try {
-      const parsedSignal = JSON.parse(pastedSignal);
-      if (activePeer && activePeer.status === 'connecting') {
-        // We have an active peer trying to connect, this must be the answer
-        signal(parsedSignal);
-        updatePeerSignal(activePeer.id, parsedSignal);
-      } else {
-        toast({
-            variant: "destructive",
-            title: "No Offer Created",
-            description: "Please create an offer first or select a peer to connect to.",
-        });
-      }
-      toast({
-        title: "Connecting...",
-        description: "Trying to establish a connection with the peer.",
-      });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Signal",
-        description: "The pasted text is not a valid connection signal.",
-      });
+        const parsedSignal: SignalData = JSON.parse(pastedSignal);
+        if (parsedSignal.type !== 'offer') {
+            throw new Error("Pasted text is not a connection offer.");
+        }
+        connectFromOffer(parsedSignal);
+        toast({ title: "Offer Received", description: "Generating an answer to send back." });
+    } catch(e) {
+         toast({ variant: "destructive", title: "Invalid Offer", description: (e as Error).message });
     }
+  };
+  
+  const handleSignalAnswer = () => {
+      try {
+          const parsedSignal: SignalData = JSON.parse(pastedSignal);
+          if (parsedSignal.type !== 'answer') {
+              throw new Error("Pasted text is not an answer.");
+          }
+          signal(parsedSignal);
+          if (activePeer) {
+              updatePeerSignal(activePeer.id, parsedSignal);
+          }
+          toast({ title: "Connecting...", description: "Trying to establish connection." });
+
+      } catch(e) {
+          toast({ variant: "destructive", title: "Invalid Answer", description: (e as Error).message });
+      }
   };
 
   const handleCopy = (text: string) => {
@@ -90,17 +106,6 @@ export function QrCodeDialog() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard!" });
   };
-  
-  useEffect(() => {
-    if(status === 'connected') {
-        toast({
-            title: "Successfully Connected!",
-            description: "You can now close this dialog and start transferring files.",
-        });
-        setTimeout(() => setOpen(false), 1000);
-    }
-  }, [status, toast]);
-
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -114,54 +119,47 @@ export function QrCodeDialog() {
         <DialogHeader>
           <DialogTitle className="text-h2">Pair a New Device</DialogTitle>
           <DialogDescription>
-            Use QR codes or text to securely connect to another device.
+            Share your offer or connect to another device's offer.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="share" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="share" onClick={handleCreateOffer}>
-              <QrCode /> Share
+              <QrCode /> Share Offer
             </TabsTrigger>
             <TabsTrigger value="connect">
-              <ScanLine /> Connect
+              <ScanLine /> Connect to Offer
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="share">
             <div className="space-y-4 p-1 pt-4">
-              {currentOffer ? (
+              {offerSignalString ? (
                 <>
                   <p className="text-sm-text text-muted-foreground">
-                    Have the other device scan this QR code or copy the text below. Then, paste their answer.
+                    Have the other device scan this QR code or copy the text. Then, paste their answer below.
                   </p>
                   <div className="p-4 bg-white rounded-lg flex justify-center">
-                    <QRCode value={JSON.stringify(currentOffer)} size={220} fgColor="#09090b" bgColor="#ffffff" />
+                    <QRCode value={offerSignalString} size={220} fgColor="#09090b" bgColor="#ffffff" />
                   </div>
                   <div className="space-y-2">
                       <Label htmlFor="offer-signal">Your Connection Offer</Label>
                       <div className="flex items-center gap-2">
-                        <Textarea
-                            id="offer-signal"
-                            value={JSON.stringify(currentOffer)}
-                            readOnly
-                            rows={4}
-                            className="font-code text-xs bg-muted flex-1"
-                        />
-                        <Button variant="ghost" size="icon" aria-label="Copy Offer" onClick={() => handleCopy(JSON.stringify(currentOffer))}><Copy /></Button>
+                        <Textarea id="offer-signal" value={offerSignalString} readOnly rows={4} className="font-code text-xs bg-muted flex-1"/>
+                        <Button variant="ghost" size="icon" aria-label="Copy Offer" onClick={() => handleCopy(offerSignalString)}><Copy /></Button>
                       </div>
                   </div>
                   <div className="space-y-2">
-                      <Label htmlFor="pasted-answer">Pasted Answer from Peer</Label>
-                      <Textarea
-                          id="pasted-answer"
-                          placeholder="Once the other device generates an answer, paste it here."
-                          value={pastedSignal}
-                          onChange={(e) => setPastedSignal(e.target.value)}
-                          rows={4}
-                          className="font-code text-xs"
-                      />
+                      <Label htmlFor="pasted-answer">Paste Answer from Peer</Label>
+                      <Textarea id="pasted-answer" placeholder="Paste the answer from the other device here..." value={pastedSignal} onChange={(e) => setPastedSignal(e.target.value)} rows={4} className="font-code text-xs"/>
                   </div>
+                   <DialogFooter className="mt-4">
+                     <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                     <Button onClick={handleSignalAnswer} disabled={!pastedSignal || status === 'connecting' || status === 'connected'}>
+                        {status === 'connecting' ? <><Loader2 className="animate-spin" /><span>Connecting...</span></> : 'Connect'}
+                     </Button>
+                   </DialogFooter>
                 </>
               ) : (
                 <div className="flex items-center justify-center h-48 text-muted-foreground">
@@ -175,48 +173,31 @@ export function QrCodeDialog() {
           <TabsContent value="connect">
               <div className="space-y-4 p-1 pt-4">
                   <p className="text-sm-text text-muted-foreground">
-                      Paste the connection offer from the other device below. Your answer will be generated for you to send back.
+                      Paste the connection offer from the other device. Your answer will be generated to send back.
                   </p>
                   <div className="space-y-2">
-                      <Label htmlFor="pasted-signal">Connection Offer</Label>
-                      <Textarea
-                          id="pasted-signal"
-                          placeholder="Paste the long text from the other device here..."
-                          value={pastedSignal}
-                          onChange={(e) => setPastedSignal(e.target.value)}
-                          rows={4}
-                          className="font-code text-xs"
-                      />
+                      <Label htmlFor="pasted-offer">Connection Offer from Peer</Label>
+                      <Textarea id="pasted-offer" placeholder="Paste the offer text here..." value={pastedSignal} onChange={(e) => setPastedSignal(e.target.value)} rows={4} className="font-code text-xs"/>
                   </div>
-                    {answerSignal && (
+                    {answerSignalString && (
                       <div className="space-y-2">
                           <Label htmlFor="answer-signal">Your Answer (Send this back)</Label>
                           <div className="flex items-center gap-2">
-                            <Textarea
-                                id="answer-signal"
-                                value={answerSignal}
-                                readOnly
-                                rows={4}
-                                className="font-code text-xs bg-muted flex-1"
-                            />
-                            <Button variant="ghost" size="icon" aria-label="Copy Answer" onClick={() => handleCopy(answerSignal)}><Copy /></Button>
+                            <Textarea id="answer-signal" value={answerSignalString} readOnly rows={4} className="font-code text-xs bg-muted flex-1"/>
+                            <Button variant="ghost" size="icon" aria-label="Copy Answer" onClick={() => handleCopy(answerSignalString)}><Copy /></Button>
                           </div>
+                          <p className="text-xs text-muted-foreground">The connection will be established once the other peer receives your answer.</p>
                       </div>
-                  )}
+                    )}
+                <DialogFooter className="mt-4">
+                    <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                    <Button onClick={handleConnectWithOffer} disabled={!pastedSignal || !!answerSignalString}>
+                        Receive Offer
+                    </Button>
+                </DialogFooter>
               </div>
           </TabsContent>
         </Tabs>
-        
-        <DialogFooter className="mt-4">
-            <DialogClose asChild>
-                <Button variant="outline">
-                    Cancel
-                </Button>
-            </DialogClose>
-            <Button onClick={handleConnect} disabled={!pastedSignal || status === 'connecting' || status === 'connected'}>
-                {status === 'connecting' ? <><Loader2 className="animate-spin" /><span>Connecting...</span></> : 'Connect'}
-            </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
