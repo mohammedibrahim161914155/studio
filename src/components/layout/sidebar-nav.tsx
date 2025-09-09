@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Send, History, Settings, Shield } from "lucide-react";
+import { Send, History } from "lucide-react";
 import {
   SidebarHeader,
   SidebarContent,
@@ -13,6 +13,7 @@ import {
 } from "@/ui/sidebar";
 import { Separator } from "@/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
+import { Shield } from "lucide-react";
 
 export function SidebarNav() {
   const pathname = usePathname();

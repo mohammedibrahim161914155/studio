@@ -4,7 +4,6 @@ import Peer, { Instance, SignalData } from 'simple-peer';
 import { useTransferStore } from '@/core/transfer';
 import { Peer as PeerInfo, usePeerManagerStore } from '@/core/peer-manager';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/ui/button';
 
 export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
