@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from "@/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import { QrCode, ScanLine } from "lucide-react";
+import { QrCode, ScanLine, Loader } from "lucide-react";
 import QRCode from "qrcode.react";
 import { usePeerStore } from "@/connection/peer";
 import { Textarea } from "@/ui/textarea";
