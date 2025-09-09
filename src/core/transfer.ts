@@ -75,7 +75,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
       return {
         files: state.files.map((tf) => {
           if (tf.file.name === fileName) {
-            const progress = Math.round((sentBytes / tf.file.size) * 100);
+            const progress = tf.file.size > 0 ? Math.round((sentBytes / tf.file.size) * 100) : 0;
             const timeDiff = now - tf.lastUpdateTime;
             let speed = tf.speed;
             // Calculate speed only if time diff is meaningful to avoid Infinity
@@ -87,7 +87,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
             return { 
               ...tf, 
               progress,
-              speed: speed > 0 ? speed : tf.speed, // Keep last known speed if current is 0
+              speed: speed >= 0 ? speed : tf.speed, // Keep last known speed if current is 0
               lastUpdateTime: now,
               lastSentBytes: sentBytes,
             };

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Send, Share2, Smartphone, Settings, Shield, BarChart2, HardDrive, History } from "lucide-react";
+import { Send, History, Settings, Shield } from "lucide-react";
 import {
   SidebarHeader,
   SidebarContent,
@@ -10,8 +10,6 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
 } from "@/ui/sidebar";
 import { Separator } from "@/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
@@ -46,59 +44,10 @@ export function SidebarNav() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/shared")} tooltip="Shared Links">
-              <Link href="#">
-                <Share2 />
-                <span>Shared Links</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/devices")} tooltip="Devices">
-              <Link href="#">
-                <Smartphone />
-                <span>Devices</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/storage")} tooltip="Storage">
-              <Link href="#">
-                <HardDrive />
-                <span>Storage</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
         </SidebarMenu>
-
-        <SidebarGroup className="mt-4">
-          <SidebarGroupLabel>Enterprise</SidebarGroupLabel>
-          <SidebarMenu>
-            <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/analytics")} tooltip="Analytics">
-              <Link href="#">
-                <BarChart2 />
-                <span>Analytics</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
-
       </SidebarContent>
       <SidebarFooter className="p-2">
         <Separator className="my-2" />
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isActive("/settings")} tooltip="Settings">
-              <Link href="#">
-                <Settings />
-                <span>Settings</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
         <div className="flex items-center gap-3 p-2 mt-2 rounded-lg bg-muted/50">
           <Avatar>
             <AvatarImage src="https://picsum.photos/40/40" width={40} height={40} data-ai-hint="person avatar" />
