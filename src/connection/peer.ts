@@ -5,6 +5,15 @@ import { useTransferStore } from '@/core/transfer';
 
 type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+// Define a structured message type for communication
+export type PeerMessage = 
+  | { type: 'handshake'; payload: { message: string } }
+  | { type: 'metadata'; payload: { name: string; size: number; type: string; } }
+  | { type: 'chunk'; payload: { name: string; chunk: ArrayBuffer; chunkIndex: number; totalChunks: number; } }
+  | { type: 'transfer-complete'; payload: { name: string; } }
+  | { type: 'progress'; payload: { name: string; progress: number; } };
+
+
 type PeerState = {
   peer: Instance | null;
   status: PeerStatus;
@@ -12,9 +21,12 @@ type PeerState = {
   createPeer: (initiator: boolean) => void;
   destroyPeer: () => void;
   signal: (data: SignalData) => void;
-  send: (data: string | ArrayBuffer | Blob) => void;
+  send: (data: PeerMessage) => void;
   connectFromOffer: (offer: SignalData) => void;
 };
+
+// Store for incoming file chunks
+const receivingFiles: { [fileName: string]: ArrayBuffer[] } = {};
 
 export const usePeerStore = create<PeerState>((set, get) => ({
   peer: null,
@@ -32,19 +44,65 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
     newPeer.on('signal', (data) => {
       // This event fires with the signaling data that needs to be sent to the other peer
-      // We will handle this in the UI components
     });
 
     newPeer.on('connect', () => {
       set({ status: 'connected' });
-      // Send a handshake message
-      get().send(JSON.stringify({ type: 'handshake', message: 'Hello!' }));
+      get().send({ type: 'handshake', payload: { message: 'Hello!' } });
     });
 
     newPeer.on('data', (data) => {
-      // Handle incoming data
-      console.log('Received data:', data.toString());
-      // Here you would handle incoming file chunks, metadata, etc.
+      try {
+        const message: PeerMessage = JSON.parse(data.toString());
+        const { addFiles, updateFileProgress, updateFileStatus } = useTransferStore.getState();
+
+        switch (message.type) {
+          case 'metadata':
+            console.log('Received metadata for:', message.payload.name);
+            receivingFiles[message.payload.name] = [];
+            // Add a placeholder file to the receiver's transfer list
+            const placeholderFile = new File([], message.payload.name, { type: message.payload.type });
+            addFiles([placeholderFile]);
+            updateFileStatus(message.payload.name, 'sending');
+            break;
+            
+          case 'chunk':
+            const { name, chunk, chunkIndex, totalChunks } = message.payload;
+            if (receivingFiles[name]) {
+              receivingFiles[name][chunkIndex] = chunk;
+              const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+              updateFileProgress(name, progress);
+              // Send progress back to the sender
+              get().send({ type: 'progress', payload: { name, progress }});
+
+              if (chunkIndex === totalChunks - 1) {
+                 // All chunks received, assemble the file
+                 const fileBlob = new Blob(receivingFiles[name], { type: useTransferStore.getState().files.find(f => f.file.name === name)?.file.type });
+                 const receivedFile = new File([fileBlob], name);
+                 
+                 // Update the store with the "real" file
+                 set(state => ({
+                    files: state.files.map(tf => tf.file.name === name ? { ...tf, file: receivedFile, status: 'complete', progress: 100 } : tf)
+                 }));
+                 delete receivingFiles[name];
+                 get().send({ type: 'transfer-complete', payload: { name } });
+              }
+            }
+            break;
+
+          case 'transfer-complete':
+            console.log('Transfer complete for:', message.payload.name);
+            updateFileStatus(message.payload.name, 'complete');
+            break;
+            
+          case 'progress':
+            // This is the sender receiving progress updates
+            updateFileProgress(message.payload.name, message.payload.progress);
+            break;
+        }
+      } catch (error) {
+        console.error("Error processing received data:", error, data);
+      }
     });
 
     newPeer.on('close', () => {
@@ -69,9 +127,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     get().peer?.signal(data);
   },
 
-  send: (data) => {
+  send: (message) => {
     if (get().status === 'connected') {
-      get().peer?.send(data);
+      get().peer?.send(JSON.stringify(message));
     } else {
       console.warn('Cannot send data, peer is not connected.');
     }
