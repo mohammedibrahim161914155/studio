@@ -1,6 +1,6 @@
 import type {Metadata} from 'next';
 import './globals.css';
-import { Toaster } from "@/ui/shadcn/toaster";
+import { Toaster } from "@/ui/toaster";
 
 export const metadata: Metadata = {
   title: 'BlackWire P2P',
