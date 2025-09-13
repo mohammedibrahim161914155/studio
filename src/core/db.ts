@@ -3,6 +3,8 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 const DB_NAME = 'BlackWireDB';
 const DB_VERSION = 1;
 const CHUNK_STORE_NAME = 'file-chunks';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 100;
 
 interface BlackWireDB extends DBSchema {
   [CHUNK_STORE_NAME]: {
@@ -19,17 +21,31 @@ const getDb = (): Promise<IDBPDatabase<BlackWireDB>> => {
   }
   dbPromise = openDB<BlackWireDB>(DB_NAME, DB_VERSION, {
     upgrade(db) {
-      db.createObjectStore(CHUNK_STORE_NAME);
+      if (!db.objectStoreNames.contains(CHUNK_STORE_NAME)) {
+        db.createObjectStore(CHUNK_STORE_NAME);
+      }
     },
   });
   return dbPromise;
 };
 
 export const addChunk = async (fileName: string, chunkIndex: number, data: ArrayBuffer) => {
-  const db = await getDb();
-  const key = `${fileName}-${chunkIndex}`;
-  await db.put(CHUNK_STORE_NAME, data, key);
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      const db = await getDb();
+      const key = `${fileName}-${chunkIndex}`;
+      await db.put(CHUNK_STORE_NAME, data, key);
+      return; // Success
+    } catch (error) {
+      console.error(`Attempt ${i + 1} to add chunk ${chunkIndex} for ${fileName} failed.`, error);
+      if (i === MAX_RETRIES - 1) {
+        throw new Error(`Failed to add chunk ${chunkIndex} for ${fileName} after ${MAX_RETRIES} attempts.`);
+      }
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    }
+  }
 };
+
 
 export const getChunk = async (fileName: string, chunkIndex: number): Promise<ArrayBuffer | undefined> => {
     const db = await getDb();
@@ -42,9 +58,9 @@ export const getReceivedChunkIndexes = async (fileName: string): Promise<number[
   const db = await getDb();
   const allKeys = await db.getAllKeys(CHUNK_STORE_NAME);
   
-  const relevantKeys = allKeys.filter(key => key.startsWith(`${fileName}-`));
+  const relevantKeys = allKeys.filter(key => typeof key === 'string' && key.startsWith(`${fileName}-`));
   
-  const indexes = relevantKeys.map(key => parseInt(key.split('-').pop() || 'NaN')).filter(index => !isNaN(index));
+  const indexes = relevantKeys.map(key => parseInt((key as string).split('-').pop() || 'NaN')).filter(index => !isNaN(index));
   
   return indexes.sort((a, b) => a - b);
 };
@@ -71,10 +87,13 @@ export const clearFileChunks = async (fileName: string) => {
   const transaction = db.transaction(CHUNK_STORE_NAME, 'readwrite');
   const store = transaction.objectStore(CHUNK_STORE_NAME);
 
-  const keys = await store.getAllKeys();
-  const fileKeys = keys.filter(key => key.startsWith(`${fileName}-`));
-
-  await Promise.all(fileKeys.map(key => store.delete(key)));
+  let cursor = await store.openCursor();
+  while(cursor) {
+    if ((cursor.key as string).startsWith(`${fileName}-`)) {
+      await cursor.delete();
+    }
+    cursor = await cursor.continue();
+  }
   
   await transaction.done;
   console.log(`Cleared all chunks for ${fileName}`);

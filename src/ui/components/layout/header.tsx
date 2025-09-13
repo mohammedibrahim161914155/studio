@@ -8,7 +8,7 @@ import { Send, Loader2 } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
 import { useTransferStore } from "@/core/transfer";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PeerMessage } from "@/connection/peer";
 
 const CHUNK_SIZE = 64 * 1024; // 64KB
@@ -19,53 +19,17 @@ export function Header() {
   const { toast } = useToast();
   const [isPreparing, setIsPreparing] = useState(false);
 
-  // Handle resume requests from the receiver
-  useState(() => {
-    if (!peer) return;
-    const handleData = (data: any) => {
-      try {
-        const message: PeerMessage = JSON.parse(data.toString());
-        if (message.type === 'resume-request') {
-          const { name, receivedChunks } = message.payload;
-          const transferFile = getFile(name);
-          if (transferFile && transferFile.direction === 'sent') {
-            const totalChunks = Math.ceil(transferFile.file.size / CHUNK_SIZE);
-            const allChunks = Array.from({ length: totalChunks }, (_, i) => i);
-            const missingChunks = allChunks.filter(i => !receivedChunks.includes(i));
-            
-            if (missingChunks.length > 0) {
-              const startChunk = missingChunks[0];
-              console.log(`Accepting resume request for ${name}, starting at chunk ${startChunk}`);
-              send({ type: 'resume-accepted', payload: { name, startChunk } });
-              // Restart sending from the specified chunk
-              sendFile(transferFile.file, startChunk); 
-            }
-          } else {
-              console.log(`Denied resume for ${name}, file not found or direction mismatch.`);
-              send({ type: 'resume-denied', payload: { name } });
-          }
-        } else if (message.type === 'resume-accepted') {
-          // This should be handled by the receiver, but we log it here
-          console.log(`Resume accepted for ${message.payload.name}, starting from ${message.payload.startChunk}`);
-          updateFileStatus(message.payload.name, 'sending');
-        }
-      } catch (e) {}
-    };
-    peer.on('data', handleData);
-    return () => {
-      peer.removeListener('data', handleData);
-    };
-  }, [peer, getFile, send]);
-
-  const sendFile = async (file: File, startChunk = 0) => {
+  const sendFile = useCallback(async (file: File, startChunk = 0) => {
+      updateFileStatus(file.name, 'sending');
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let sentBytes = startChunk * CHUNK_SIZE;
 
       for (let i = startChunk; i < totalChunks; i++) {
+          // Check connection status before each chunk
           if (usePeerStore.getState().status !== 'connected') {
               toast({ variant: 'destructive', title: 'Transfer Interrupted', description: 'Connection lost. Please reconnect.' });
               updateFileStatus(file.name, 'error');
-              break;
+              return; // Stop sending
           }
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -85,7 +49,33 @@ export function Header() {
           sentBytes += arrayBuffer.byteLength;
           updateFileProgress(file.name, sentBytes);
       }
-  }
+  }, [send, toast, updateFileStatus, updateFileProgress]);
+
+
+  // Handle resume requests from the receiver
+  useEffect(() => {
+    if (!peer) return;
+
+    const handleData = (data: any) => {
+      try {
+        const message: PeerMessage = JSON.parse(data.toString());
+        if (message.type === 'resume-accepted') {
+          console.log(`Resume accepted for ${message.payload.name}, starting from ${message.payload.startChunk}`);
+          updateFileStatus(message.payload.name, 'sending');
+          const file = getFile(message.payload.name)?.file;
+          if (file) {
+            sendFile(file, message.payload.startChunk);
+          }
+        }
+      } catch (e) {
+        // Ignore non-json messages
+      }
+    };
+    peer.on('data', handleData);
+    return () => {
+      peer.removeListener('data', handleData);
+    };
+  }, [peer, getFile, sendFile, updateFileStatus]);
 
 
   const handleSend = async () => {

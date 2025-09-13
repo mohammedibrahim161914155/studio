@@ -36,9 +36,6 @@ type PeerState = {
   setCurrentOffer: (offer: SignalData | null) => void;
 };
 
-// Store for incoming file chunks
-const receivingFiles: { [fileName: string]: { chunks: (ArrayBuffer | undefined)[], type: string, receivedSize: number, totalSize: number, checksum: string } } = {};
-
 export const usePeerStore = create<PeerState>((set, get) => ({
   peer: null,
   status: 'disconnected',
@@ -110,6 +107,8 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                 if (receivedChunks.length > 0) {
                     console.log(`Found ${receivedChunks.length} existing chunks for ${name}. Requesting resume.`);
                     updateFileStatus(name, 'resuming', peerId);
+                    // We start receiving so the UI updates, but also send a resume request.
+                    startReceivingFile({ name, size, type, checksum, peerId });
                     get().send({ type: 'resume-request', payload: { name, receivedChunks } });
                 } else {
                     console.log(`No existing chunks for ${name}. Starting new download.`);
@@ -119,15 +118,13 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
             const peer = getPeer(peerId);
             if(peer?.trusted) {
-                toast({ title: `Incoming transfer from ${peer.name}`, description: `Auto-accepting transfer for ${name}`})
                 await handleReceive();
             } else {
                  toast({
                     title: 'Incoming File Transfer',
-                    description: `${peer?.name || 'A peer'} wants to send you "${name}". This would normally require user acceptance.`,
+                    description: `${peer?.name || 'A peer'} wants to send you "${name}". This would normally require user acceptance. For now, it is auto-accepted.`,
                     duration: 10000,
                 });
-                 // For now, auto-accepting for demonstration.
                 await handleReceive();
             }
             break;
@@ -137,17 +134,36 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
             const transferFile = getFile(name);
 
-            if (transferFile) {
-              await addChunk(name, chunkIndex, chunk);
-
-              const allChunkIndexes = await getReceivedChunkIndexes(name);
-              let receivedSize = 0;
-              for(const index of allChunkIndexes) {
-                  // This is a rough estimation of received size, not perfectly accurate
-                  // as chunks might vary slightly in size.
-                  receivedSize += transferFile.file.size / totalChunks;
+            if (transferFile && transferFile.status !== 'complete' && transferFile.status !== 'error') {
+              try {
+                await addChunk(name, chunkIndex, chunk);
+              } catch (error) {
+                console.error(`Failed to store chunk ${chunkIndex} for ${name}.`, error);
+                updateFileStatus(name, 'error', get().activePeer?.id);
+                toast({ variant: 'destructive', title: "Transfer Failed", description: `Could not save file part for ${name}. Your storage may be full.` });
+                await clearFileChunks(name);
+                return;
               }
 
+              const allChunkIndexes = await getReceivedChunkIndexes(name);
+
+              // Hardening: If DB was cleared mid-transfer, chunk indexes won't match. Reset and re-request.
+              if (chunkIndex > 0 && allChunkIndexes.length <= chunkIndex) {
+                 console.warn(`Inconsistency detected for ${name}. DB may have been cleared. Resetting transfer.`);
+                 updateFileStatus(name, 'error', get().activePeer?.id);
+                 await clearFileChunks(name);
+                 toast({ variant: 'destructive', title: 'Transfer Error', description: `Data for ${name} became corrupted. Retrying...` });
+                 // Request a full restart by sending a resume request with no chunks
+                 get().send({ type: 'resume-request', payload: { name, receivedChunks: [] } });
+                 return;
+              }
+              
+              const receivedSize = allChunkIndexes.reduce((acc, index) => {
+                  // A rough estimation, assuming all chunks are roughly equal.
+                  const estimatedChunkSize = transferFile.file.size / totalChunks;
+                  return acc + estimatedChunkSize;
+              }, 0);
+              
               updateFileProgress(name, receivedSize);
 
               // Check if all chunks are received
@@ -157,10 +173,10 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                  const validChunks = chunksFromDb.filter((c): c is ArrayBuffer => c !== undefined);
 
                  if (validChunks.length !== totalChunks) {
-                     console.error(`DB consistency error for ${name}. Expected ${totalChunks} chunks, got ${validChunks.length}`);
+                     console.error(`DB consistency error for ${name}. Expected ${totalChunks} chunks, got ${validChunks.length}. Retrying.`);
                      updateFileStatus(name, 'error', get().activePeer?.id);
-                     toast({ variant: 'destructive', title: "Transfer Failed", description: `Could not retrieve all file parts for ${name}.` });
-                     await clearFileChunks(name); // Clean up inconsistent state
+                     await clearFileChunks(name);
+                     get().send({ type: 'resume-request', payload: { name, receivedChunks: [] } });
                      return;
                  }
 
@@ -173,14 +189,41 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                     get().send({ type: 'transfer-verified', payload: { name } });
                     toast({ title: "Transfer Complete", description: `Successfully received and verified ${name}.` });
                  } else {
-                    console.error(`Checksum mismatch for ${name}`);
+                    console.error(`Checksum mismatch for ${name}. Retrying file.`);
                     updateFileStatus(name, 'error', get().activePeer?.id);
-                    toast({ variant: 'destructive', title: "Transfer Failed", description: `Checksum verification failed for ${name}.` });
+                    toast({ variant: 'destructive', title: "Transfer Failed", description: `Data for ${name} was corrupt. Retrying...` });
                     await clearFileChunks(name); // Clean up bad data
+                    get().send({ type: 'resume-request', payload: { name, receivedChunks: [] } });
                  }
               }
             }
             break;
+          }
+          case 'resume-request': {
+             const { name, receivedChunks } = message.payload;
+             const transferFile = getFile(name);
+             if (transferFile && transferFile.direction === 'sent') {
+                const totalChunks = Math.ceil(transferFile.file.size / (64 * 1024));
+                const allChunks = Array.from({ length: totalChunks }, (_, i) => i);
+                const missingChunks = allChunks.filter(i => !receivedChunks.includes(i));
+                
+                if (missingChunks.length > 0) {
+                  const startChunk = missingChunks[0];
+                  console.log(`Accepting resume request for ${name}, starting at chunk ${startChunk}`);
+                  send({ type: 'resume-accepted', payload: { name, startChunk } });
+                  // The sendFile function in header will be triggered by this
+                } else {
+                  console.log(`Resume requested for ${name}, but no chunks are missing.`);
+                  // This could happen if verification failed on their end. We can just resend completion.
+                  if(transferFile.status === 'complete') {
+                    send({ type: 'transfer-verified', payload: { name } });
+                  }
+                }
+             } else {
+                  console.log(`Denied resume for ${name}, file not found or direction mismatch.`);
+                  send({ type: 'resume-denied', payload: { name } });
+             }
+             break;
           }
           case 'resume-denied': {
              const { name } = message.payload;
@@ -188,6 +231,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
              await clearFileChunks(name);
              const file = getFile(name);
              if (file && file.peerId) {
+                // Re-initiate the file receiving process
                 startReceivingFile({ name, size: file.file.size, type: file.file.type, checksum: file.checksum!, peerId: file.peerId });
              }
              break;
