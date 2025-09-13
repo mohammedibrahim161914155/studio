@@ -3,7 +3,7 @@
 import { TableCell, TableRow } from "@/ui/table";
 import { Progress } from "@/ui/progress";
 import { Button } from "@/ui/button";
-import { Trash2, File, CheckCircle2, AlertTriangle, ShieldCheck, Hourglass } from "lucide-react";
+import { Trash2, File, CheckCircle2, AlertTriangle, ShieldCheck, Hourglass, RefreshCw } from "lucide-react";
 import { TransferFile, useTransferStore } from "@/core/transfer";
 
 interface TransferListItemProps {
@@ -28,8 +28,10 @@ const StatusInfo = ({ status }: { status: TransferFile['status'] }) => {
             return <><AlertTriangle className="w-4 h-4 text-destructive" /> <span className="text-destructive">Error</span></>;
         case 'verifying':
             return <><Hourglass className="w-4 h-4 text-yellow-500 animate-spin" /> <span>Verifying...</span></>;
+        case 'resuming':
+            return <><RefreshCw className="w-4 h-4 text-blue-500 animate-spin" /> <span>Resuming...</span></>;
         case 'sending':
-            return <><ShieldCheck className="w-4 h-4 text-sky-500" /> <span>Sending</span></>;
+            return <><ShieldCheck className="w-4 h-4 text-sky-500" /> <span>In Progress</span></>;
         default:
              return <><ShieldCheck className="w-4 h-4 text-muted-foreground" /> <span>Pending</span></>;
     }

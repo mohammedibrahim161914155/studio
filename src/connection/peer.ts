@@ -4,6 +4,7 @@ import Peer, { Instance, SignalData } from 'simple-peer';
 import { useTransferStore } from '@/core/transfer';
 import { Peer as PeerInfo, usePeerManagerStore } from '@/core/peer-manager';
 import { useToast } from '@/hooks/use-toast';
+import { addChunk, getFileChunks, getReceivedChunkIndexes, clearFileChunks } from '@/core/db';
 
 export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -14,7 +15,10 @@ export type PeerMessage =
   | { type: 'chunk'; payload: { name: string; chunk: ArrayBuffer; chunkIndex: number; totalChunks: number; } }
   | { type: 'transfer-complete'; payload: { name: string; } }
   | { type: 'transfer-verified'; payload: { name: string; } }
-  | { type: 'progress'; payload: { name: string; progress: number; } };
+  | { type: 'progress'; payload: { name: string; progress: number; } }
+  | { type: 'resume-request'; payload: { name: string; receivedChunks: number[] } }
+  | { type: 'resume-accepted'; payload: { name: string; startChunk: number } }
+  | { type: 'resume-denied'; payload: { name: string; } };
 
 
 type PeerState = {
@@ -33,7 +37,7 @@ type PeerState = {
 };
 
 // Store for incoming file chunks
-const receivingFiles: { [fileName: string]: { chunks: ArrayBuffer[], type: string, receivedSize: number, totalSize: number, checksum: string } } = {};
+const receivingFiles: { [fileName: string]: { chunks: (ArrayBuffer | undefined)[], type: string, receivedSize: number, totalSize: number, checksum: string } } = {};
 
 export const usePeerStore = create<PeerState>((set, get) => ({
   peer: null,
@@ -83,7 +87,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     newPeer.on('data', async (data) => {
       try {
         const message: PeerMessage = JSON.parse(data.toString());
-        const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile } = useTransferStore.getState();
+        const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile, getFile } = useTransferStore.getState();
         const { updatePeerName, getPeer } = usePeerManagerStore.getState();
         const { toast } = useToast();
 
@@ -99,49 +103,72 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             console.log('Received metadata for:', message.payload.name);
             const { name, size, type, checksum } = message.payload;
             const peerId = get().activePeer?.id;
-
             if (!peerId) return;
 
-            const peer = getPeer(peerId);
-            const handleReceive = () => {
-                receivingFiles[name] = { chunks: [], type, receivedSize: 0, totalSize: size, checksum };
-                startReceivingFile({ name, size, type, checksum, peerId });
+            const handleReceive = async () => {
+                const receivedChunks = await getReceivedChunkIndexes(name);
+                if (receivedChunks.length > 0) {
+                    console.log(`Found ${receivedChunks.length} existing chunks for ${name}. Requesting resume.`);
+                    updateFileStatus(name, 'resuming', peerId);
+                    get().send({ type: 'resume-request', payload: { name, receivedChunks } });
+                } else {
+                    console.log(`No existing chunks for ${name}. Starting new download.`);
+                    startReceivingFile({ name, size, type, checksum, peerId });
+                }
             }
 
+            const peer = getPeer(peerId);
             if(peer?.trusted) {
-                toast({ title: `Incoming transfer from ${peer.name}`, description: `Auto-accepting trusted transfer for ${name}`})
-                handleReceive();
+                toast({ title: `Incoming transfer from ${peer.name}`, description: `Auto-accepting transfer for ${name}`})
+                await handleReceive();
             } else {
-                toast({
+                 toast({
                     title: 'Incoming File Transfer',
-                    description: `${peer?.name || 'A peer'} wants to send you "${name}". Since this is not a trusted peer, you would need a UI to accept this.`,
-                    duration: 30000,
-                })
-                 // For now, auto-accepting for demonstration until UI is properly wired.
-                handleReceive();
+                    description: `${peer?.name || 'A peer'} wants to send you "${name}". This would normally require user acceptance.`,
+                    duration: 10000,
+                });
+                 // For now, auto-accepting for demonstration.
+                await handleReceive();
             }
             break;
           }
             
           case 'chunk': {
             const { name, chunk, chunkIndex, totalChunks } = message.payload;
-            if (receivingFiles[name]) {
-              // Directly use the buffer from the message
-              const arrayBuffer = chunk;
-              receivingFiles[name].chunks[chunkIndex] = arrayBuffer;
-              receivingFiles[name].receivedSize += arrayBuffer.byteLength;
+            const transferFile = getFile(name);
 
-              updateFileProgress(name, receivingFiles[name].receivedSize);
+            if (transferFile) {
+              await addChunk(name, chunkIndex, chunk);
+
+              const allChunkIndexes = await getReceivedChunkIndexes(name);
+              let receivedSize = 0;
+              for(const index of allChunkIndexes) {
+                  // This is a rough estimation of received size, not perfectly accurate
+                  // as chunks might vary slightly in size.
+                  receivedSize += transferFile.file.size / totalChunks;
+              }
+
+              updateFileProgress(name, receivedSize);
 
               // Check if all chunks are received
-              const receivedChunksCount = Object.values(receivingFiles[name].chunks).filter(Boolean).length;
-              if (receivedChunksCount === totalChunks) {
-                 const fileBlob = new Blob(receivingFiles[name].chunks, { type: receivingFiles[name].type });
-                 
+              if (allChunkIndexes.length === totalChunks) {
                  updateFileStatus(name, 'verifying', get().activePeer?.id);
+                 const chunksFromDb = await getFileChunks(name, totalChunks);
+                 const validChunks = chunksFromDb.filter((c): c is ArrayBuffer => c !== undefined);
+
+                 if (validChunks.length !== totalChunks) {
+                     console.error(`DB consistency error for ${name}. Expected ${totalChunks} chunks, got ${validChunks.length}`);
+                     updateFileStatus(name, 'error', get().activePeer?.id);
+                     toast({ variant: 'destructive', title: "Transfer Failed", description: `Could not retrieve all file parts for ${name}.` });
+                     await clearFileChunks(name); // Clean up inconsistent state
+                     return;
+                 }
+
+                 const fileBlob = new Blob(validChunks, { type: transferFile.file.type });
+                 
                  const receivedChecksum = await calculateFileChecksum(fileBlob);
                  
-                 if (receivedChecksum === receivingFiles[name].checksum) {
+                 if (receivedChecksum === transferFile.checksum) {
                     updateFileStatus(name, 'complete', get().activePeer?.id);
                     get().send({ type: 'transfer-verified', payload: { name } });
                     toast({ title: "Transfer Complete", description: `Successfully received and verified ${name}.` });
@@ -149,14 +176,22 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                     console.error(`Checksum mismatch for ${name}`);
                     updateFileStatus(name, 'error', get().activePeer?.id);
                     toast({ variant: 'destructive', title: "Transfer Failed", description: `Checksum verification failed for ${name}.` });
+                    await clearFileChunks(name); // Clean up bad data
                  }
-
-                 delete receivingFiles[name];
               }
             }
             break;
           }
-
+          case 'resume-denied': {
+             const { name } = message.payload;
+             console.log(`Resume denied for ${name}. Starting from scratch.`);
+             await clearFileChunks(name);
+             const file = getFile(name);
+             if (file && file.peerId) {
+                startReceivingFile({ name, size: file.file.size, type: file.file.type, checksum: file.checksum!, peerId: file.peerId });
+             }
+             break;
+          }
           case 'transfer-verified':
             console.log('Transfer verified for:', message.payload.name);
             updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);

@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { useLogStore } from './transfer-log';
+import { clearFileChunks, getFileChunks } from './db';
 
 export type TransferFile = {
   file: File;
   progress: number;
-  status: 'pending' | 'sending' | 'paused' | 'complete' | 'error' | 'verifying';
+  status: 'pending' | 'sending' | 'paused' | 'complete' | 'error' | 'verifying' | 'resuming';
   speed: number; // in bytes per second
   checksum?: string;
   lastUpdateTime: number;
@@ -118,6 +119,11 @@ export const useTransferStore = create<TransferState>((set, get) => ({
               timestamp: new Date(),
               direction: updatedTf.direction
             });
+
+            if (updatedTf.direction === 'received' && status === 'complete') {
+                // Once transfer is complete, we don't need the chunks anymore.
+                clearFileChunks(fileName);
+            }
           }
           return updatedTf;
         }
