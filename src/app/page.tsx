@@ -1,16 +1,16 @@
 
 'use client';
 import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
-import { Header } from "@/ui/components/layout/header";
-import { FileDropzone } from "@/ui/components/file-dropzone";
-import { TransferList } from "@/ui/components/transfer-list";
-import { DeviceList } from "@/ui/components/device-list";
-import { SidebarNav } from "@/ui/components/layout/sidebar-nav";
+import { Header } from "@/components/layout/header";
+import { FileDropzone } from "@/components/file-dropzone";
+import { TransferList } from "@/components/transfer-list";
+import { DeviceList } from "@/components/device-list";
+import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { useEffect, useState, useRef } from "react";
 import { usePeerStore } from "@/connection/peer";
 import { useToast } from "@/hooks/use-toast";
 import pako from 'pako';
-import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
+import { QrCodeDialog } from "@/components/qr-code-dialog";
 import { usePeerManagerStore } from "@/core/peer-manager";
 
 const decodeOfferFromUrl = (encodedOffer: string): string | null => {
