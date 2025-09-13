@@ -10,9 +10,9 @@ import { Peer } from '@/core/peer-manager';
 jest.mock('@/connection/peer');
 jest.mock('@/core/transfer');
 jest.mock('@/hooks/use-toast');
-jest.mock('@/ui/components/theme-toggle', () => ({ ThemeToggle: () => <div data-testid="theme-toggle" /> }));
-jest.mock('@/ui/components/share-link-dialog', () => ({ ShareLinkDialog: () => <div data-testid="share-link-dialog" /> }));
-jest.mock('@/ui/components/qr-code-dialog', () => ({ QrCodeDialog: () => <div data-testid="qr-code-dialog" /> }));
+jest.mock('@/components/theme-toggle', () => ({ ThemeToggle: () => <div data-testid="theme-toggle" /> }));
+jest.mock('@/components/share-link-dialog', () => ({ ShareLinkDialog: () => <div data-testid="share-link-dialog" /> }));
+jest.mock('@/components/qr-code-dialog', () => ({ QrCodeDialog: () => <div data-testid="qr-code-dialog" /> }));
 
 describe('Header', () => {
   const mockUsePeerStore = usePeerStore as jest.Mock;

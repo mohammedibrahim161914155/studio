@@ -1,7 +1,7 @@
 import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
-import { Header } from "@/ui/components/layout/header";
-import { SidebarNav } from "@/ui/components/layout/sidebar-nav";
-import { TransferHistoryList } from "@/ui/components/transfer-history-list";
+import { Header } from "@/components/layout/header";
+import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { TransferHistoryList } from "@/components/transfer-history-list";
 
 export default function HistoryPage() {
   return (
