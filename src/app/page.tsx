@@ -1,12 +1,85 @@
+
+'use client';
 import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
 import { DeviceList } from "@/components/device-list";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { useEffect } from "react";
+import { usePeerStore } from "@/connection/peer";
+import { useToast } from "@/hooks/use-toast";
+import pako from 'pako';
+import { QrCodeDialog } from "@/components/qr-code-dialog";
+import { useState } from "react";
+
+const decodeOfferFromUrl = (encodedOffer: string): string | null => {
+    try {
+        const compressed = Buffer.from(encodedOffer, 'base64');
+        const decompressed = pako.inflate(compressed, { to: 'string' });
+        // Basic validation that it's a JSON object
+        JSON.parse(decompressed);
+        return decompressed;
+    } catch (error) {
+        console.error("Failed to decode offer from URL:", error);
+        return null;
+    }
+};
+
 
 export default function Home() {
+  const { connectFromOffer } = usePeerStore();
+  const { toast } = useToast();
+  const [isAutoConnecting, setIsAutoConnecting] = useState(true);
+  const [showQrDialog, setShowQrDialog] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleUrlOffer = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#/connect/')) {
+        const encodedOffer = hash.substring('#/connect/'.length);
+        const decodedOffer = decodeOfferFromUrl(encodedOffer);
+
+        if (decodedOffer) {
+            try {
+                const parsedSignal = JSON.parse(decodedOffer);
+                connectFromOffer(parsedSignal);
+                setShowQrDialog(true);
+                toast({
+                    title: "Connecting via Link",
+                    description: "Received a connection offer from the link. Please copy your answer and send it back to the sender.",
+                });
+            } catch (e) {
+                 toast({
+                    variant: "destructive",
+                    title: "Invalid Link",
+                    description: "The connection link is malformed or expired.",
+                });
+            }
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Invalid Link",
+                description: "Could not decode the connection offer from the link.",
+            });
+        }
+        
+        // Clean up the URL
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+      setIsAutoConnecting(false);
+    };
+
+    // Give a small delay to allow stores to hydrate before processing
+    const timeoutId = setTimeout(handleUrlOffer, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [connectFromOffer, toast]);
+
   return (
+    <>
     <SidebarProvider>
       <div className="min-h-screen bg-background">
         <Sidebar>
@@ -30,5 +103,7 @@ export default function Home() {
         </div>
       </div>
     </SidebarProvider>
+    {showQrDialog && <QrCodeDialog open={showQrDialog} onOpenChange={setShowQrDialog} />}
+    </>
   );
 }
