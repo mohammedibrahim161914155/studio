@@ -1,8 +1,8 @@
 'use client';
 import { SidebarTrigger } from "@/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { ShareLinkDialog } from "@/components/share-link-dialog";
-import { QrCodeDialog } from "@/components/qr-code-dialog";
+import { ThemeToggle } from "@/ui/components/theme-toggle";
+import { ShareLinkDialog } from "@/ui/components/share-link-dialog";
+import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
 import { Button } from "@/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
@@ -20,6 +20,9 @@ export function Header() {
   const [isPreparing, setIsPreparing] = useState(false);
 
   const sendFile = useCallback(async (file: File, startChunk = 0) => {
+      const currentTransfer = useTransferStore.getState().getFile(file.name);
+      if (currentTransfer?.direction !== 'sent') return; // Don't send if it's a received file
+
       updateFileStatus(file.name, 'sending');
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let sentBytes = startChunk * CHUNK_SIZE;
@@ -61,7 +64,6 @@ export function Header() {
         const message: PeerMessage = JSON.parse(data.toString());
         if (message.type === 'resume-accepted') {
           console.log(`Resume accepted for ${message.payload.name}, starting from ${message.payload.startChunk}`);
-          updateFileStatus(message.payload.name, 'sending');
           const file = getFile(message.payload.name)?.file;
           if (file) {
             sendFile(file, message.payload.startChunk);
@@ -83,7 +85,7 @@ export function Header() {
       toast({ variant: 'destructive', title: 'Not Connected', description: 'Please connect to a peer before sending files.' });
       return;
     }
-    const pendingFiles = files.filter(f => f.status === 'pending');
+    const pendingFiles = files.filter(f => f.status === 'pending' && f.direction === 'sent');
     if (pendingFiles.length === 0) {
       toast({ variant: 'destructive', title: 'No Files to Send', description: 'Add new files or clear completed ones to send again.' });
       return;
@@ -116,7 +118,7 @@ export function Header() {
     }
   };
 
-  const filesToSend = files.filter(f => f.status === 'pending');
+  const filesToSend = files.filter(f => f.status === 'pending' && f.direction === 'sent');
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">

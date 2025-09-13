@@ -1,6 +1,6 @@
 
-import { render, screen, fireEvent } from '@testing-library/react';
-import { TransferList } from '../transfer-list';
+import { render, screen } from '@testing-library/react';
+import { TransferList } from '@/ui/components/transfer-list';
 import { useTransferStore, TransferFile } from '@/core/transfer';
 
 // Mock the transfer store
@@ -9,14 +9,11 @@ jest.mock('@/core/transfer', () => ({
 }));
 
 // Mock the child component
-jest.mock('../transfer-list-item', () => ({
+jest.mock('@/ui/components/transfer-list-item', () => ({
   TransferListItem: ({ transfer }: { transfer: TransferFile }) => (
     <tr>
       <td>{transfer.file.name}</td>
       <td>{transfer.status}</td>
-      <td>
-        <button onClick={() => useTransferStore.getState().removeFile(transfer.file.name)}>Remove</button>
-      </td>
     </tr>
   ),
 }));

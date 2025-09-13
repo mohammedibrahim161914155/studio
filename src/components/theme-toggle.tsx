@@ -2,31 +2,19 @@
 
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 
 export function ThemeToggle() {
   const [theme, setThemeState] = React.useState<"light" | "dark">("light");
 
   React.useEffect(() => {
-    // Check for theme in localStorage first, then check the DOM
-    const storedTheme = window.localStorage.getItem('theme') as "light" | "dark" | null;
-    if (storedTheme) {
-      setThemeState(storedTheme);
-      if (storedTheme === 'dark') {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    } else {
-      const isDarkMode = document.documentElement.classList.contains("dark");
-      setThemeState(isDarkMode ? "dark" : "light");
-    }
+    const isDarkMode = document.documentElement.classList.contains("dark");
+    setThemeState(isDarkMode ? "dark" : "light");
   }, []);
 
   const toggleTheme = () => {
     setThemeState(prevTheme => {
       const newTheme = prevTheme === 'dark' ? 'light' : 'dark';
-      window.localStorage.setItem('theme', newTheme);
       if (newTheme === 'dark') {
         document.documentElement.classList.add("dark");
       } else {
@@ -36,15 +24,12 @@ export function ThemeToggle() {
     })
   }
 
+  const ariaLabel = theme === 'dark' ? 'switch to light mode' : 'switch to dark mode';
+
   return (
-    <Button 
-      variant="ghost" 
-      size="icon" 
-      onClick={toggleTheme} 
-      aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-    >
-      <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+    <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={ariaLabel}>
+      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
       <span className="sr-only">Toggle theme</span>
     </Button>
   );

@@ -14,7 +14,7 @@ const config: Config = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
-    '^@/components/(.*)$': '<rootDir>/src/ui/components/$1',
+    '^@/ui/components/(.*)$': '<rootDir>/src/ui/components/$1',
     '^@/ui/(.*)$': '<rootDir>/src/ui/shadcn/$1',
     '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
     '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',

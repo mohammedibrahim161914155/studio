@@ -1,7 +1,7 @@
 
 "use client"
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  DialogClose,
+} from "@/ui/dialog";
+import { Input } from "@/ui/input";
+import { Label } from "@/ui/label";
 import { Link as LinkIcon, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePeerStore } from "@/connection/peer";
@@ -52,7 +53,6 @@ export function ShareLinkDialog() {
 
   const handleGenerateLink = () => {
     setShareLink(""); // Reset previous link
-    destroyPeer(); // Ensure no old peer is lying around
     createPeer(true); // Create a new peer as initiator to generate an offer
   };
 
@@ -69,7 +69,7 @@ export function ShareLinkDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" onClick={() => { setOpen(true); handleGenerateLink(); }}>
-          <LinkIcon/>
+          <LinkIcon />
           <span>Share via Link</span>
         </Button>
       </DialogTrigger>
@@ -102,10 +102,15 @@ export function ShareLinkDialog() {
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="accent" onClick={() => setOpen(false)}>Done</Button>
+          <Button variant="secondary" onClick={handleGenerateLink}>
+            <RefreshCw />
+            Regenerate Link
+          </Button>
+          <DialogClose asChild>
+            <Button type="button" variant="accent">Done</Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
