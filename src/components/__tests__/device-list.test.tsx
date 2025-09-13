@@ -1,21 +1,23 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { DeviceList } from '../device-list';
+import { DeviceList } from '@/ui/components/device-list';
 import { usePeerManagerStore, Peer } from '@/core/peer-manager';
 import { usePeerStore } from '@/connection/peer';
 import { useToast } from '@/hooks/use-toast';
 
 // Mock the stores and hooks
-jest.mock('@/core/peer-manager', () => ({
-  usePeerManagerStore: jest.fn(),
-}));
-
-jest.mock('@/connection/peer', () => ({
-  usePeerStore: jest.fn(),
-}));
-
+jest.mock('@/core/peer-manager');
+jest.mock('@/connection/peer');
 jest.mock('@/hooks/use-toast', () => ({
   useToast: jest.fn(() => ({ toast: jest.fn() })),
+}));
+
+// Mock child components to prevent issues with their own logic
+jest.mock('@/ui/input', () => ({
+  Input: (props: any) => <input data-testid="mock-input" {...props} />,
+}));
+jest.mock('@/ui/switch', () => ({
+  Switch: (props: any) => <input type="checkbox" role="switch" {...props} />,
 }));
 
 
@@ -96,17 +98,17 @@ describe('DeviceList', () => {
     expect(mockToast).toHaveBeenCalledWith({ title: 'Disconnected', description: 'Disconnected from Laptop.' });
   });
 
-  it('allows editing and saving a peer name', () => {
+  it('allows editing and saving a peer name', async () => {
     const updatePeerName = jest.fn();
     const peers: Peer[] = [{ id: '1', name: 'Old Name', status: 'disconnected', trusted: false }];
     mockUsePeerManagerStore.mockReturnValue({ peers, updatePeerName });
 
     render(<DeviceList />);
 
-    // Enter edit mode
+    // Enter edit mode by clicking the edit button
     fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     
-    const input = screen.getByDisplayValue('Old Name');
+    const input = await screen.findByDisplayValue('Old Name');
     expect(input).toBeInTheDocument();
 
     // Change name and save
@@ -114,7 +116,7 @@ describe('DeviceList', () => {
     fireEvent.click(screen.getByRole('button', { name: /check/i }));
 
     expect(updatePeerName).toHaveBeenCalledWith('1', 'New Name');
-    expect(screen.queryByDisplayValue('New Name')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('New Name')).not.toBeInTheDocument(); // Input field should disappear
   });
 
   it('calls removePeer when remove button is clicked', () => {
