@@ -6,12 +6,12 @@ import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
 import { DeviceList } from "@/components/device-list";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { usePeerStore } from "@/connection/peer";
 import { useToast } from "@/hooks/use-toast";
 import pako from 'pako';
 import { QrCodeDialog } from "@/components/qr-code-dialog";
-import { useState } from "react";
+import { usePeerManagerStore } from "@/core/peer-manager";
 
 const decodeOfferFromUrl = (encodedOffer: string): string | null => {
     try {
@@ -28,10 +28,12 @@ const decodeOfferFromUrl = (encodedOffer: string): string | null => {
 
 
 export default function Home() {
-  const { connectFromOffer } = usePeerStore();
+  const { connectFromOffer, connectToPeer, status: peerStatus } = usePeerStore();
+  const { peers } = usePeerManagerStore();
   const { toast } = useToast();
-  const [isAutoConnecting, setIsAutoConnecting] = useState(true);
   const [showQrDialog, setShowQrDialog] = useState(false);
+  const autoConnectAttempted = useRef(false);
+
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -69,7 +71,6 @@ export default function Home() {
         // Clean up the URL
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
       }
-      setIsAutoConnecting(false);
     };
 
     // Give a small delay to allow stores to hydrate before processing
@@ -77,6 +78,25 @@ export default function Home() {
 
     return () => clearTimeout(timeoutId);
   }, [connectFromOffer, toast]);
+
+
+  // Auto-reconnect to trusted peers
+  useEffect(() => {
+    // Only run on initial mount and if no connection is active/pending
+    if (peerStatus === 'disconnected' && !autoConnectAttempted.current && peers.length > 0) {
+      const trustedPeer = peers.find(p => p.trusted && p.offer);
+      if (trustedPeer) {
+        console.log(`Attempting to auto-reconnect to trusted peer: ${trustedPeer.name}`);
+        toast({
+          title: "Auto-reconnecting...",
+          description: `Attempting to connect to your trusted device: ${trustedPeer.name}`,
+        });
+        connectToPeer(trustedPeer);
+      }
+      autoConnectAttempted.current = true; // Ensure this runs only once
+    }
+  }, [peers, peerStatus, connectToPeer, toast]);
+
 
   return (
     <>
