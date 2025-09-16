@@ -10,8 +10,10 @@ import { useTransferStore } from "@/core/transfer";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { PeerMessage } from "@/connection/peer";
+import type { TransferFile } from "@/core/transfer";
 
-const CHUNK_SIZE = 64 * 1024; // 64KB
+const CHUNK_SIZE = 128 * 1024; // 128KB for better performance
+const PARALLEL_CHUNKS = 4; // Number of chunks to send in parallel
 
 export function Header() {
   const { status, send, activePeer, peer } = usePeerStore();
@@ -19,40 +21,62 @@ export function Header() {
   const { toast } = useToast();
   const [isPreparing, setIsPreparing] = useState(false);
 
-  const sendFile = useCallback(async (file: File, startChunk = 0) => {
-      const currentTransfer = useTransferStore.getState().getFile(file.name);
-      if (currentTransfer?.direction !== 'sent') return; // Don't send if it's a received file
-
+  const sendFileInParallel = useCallback(async (file: File, startChunk = 0) => {
       updateFileStatus(file.name, 'sending');
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let sentBytes = startChunk * CHUNK_SIZE;
+      let chunksInFlight = 0;
+      let nextChunkIndex = startChunk;
 
-      for (let i = startChunk; i < totalChunks; i++) {
-          // Check connection status before each chunk
-          if (usePeerStore.getState().status !== 'connected') {
-              toast({ variant: 'destructive', title: 'Transfer Interrupted', description: 'Connection lost. Please reconnect.' });
-              updateFileStatus(file.name, 'error');
-              return; // Stop sending
+      const sendChunk = async (chunkIndex: number) => {
+          if (chunkIndex >= totalChunks || usePeerStore.getState().status !== 'connected') {
+              if (usePeerStore.getState().status !== 'connected') {
+                  updateFileStatus(file.name, 'error');
+              }
+              return;
           }
-          const start = i * CHUNK_SIZE;
+
+          chunksInFlight++;
+          const start = chunkIndex * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const chunk = file.slice(start, end);
-          const arrayBuffer = await chunk.arrayBuffer();
-
-          send({
-            type: 'chunk',
-            payload: {
-              name: file.name,
-              chunk: arrayBuffer,
-              chunkIndex: i,
-              totalChunks: totalChunks,
-            }
-          });
           
-          sentBytes += arrayBuffer.byteLength;
-          updateFileProgress(file.name, sentBytes);
+          try {
+              const arrayBuffer = await chunk.arrayBuffer();
+              send({
+                  type: 'chunk',
+                  payload: {
+                      name: file.name,
+                      chunk: arrayBuffer,
+                      chunkIndex: chunkIndex,
+                      totalChunks: totalChunks,
+                  }
+              });
+              sentBytes += arrayBuffer.byteLength;
+              updateFileProgress(file.name, sentBytes);
+          } catch (error) {
+              console.error(`Error sending chunk ${chunkIndex}:`, error);
+              updateFileStatus(file.name, 'error');
+              // This will stop the loop
+              nextChunkIndex = totalChunks;
+          } finally {
+              chunksInFlight--;
+              // If there are more chunks to send, send the next one
+              if (nextChunkIndex < totalChunks) {
+                  sendChunk(nextChunkIndex++);
+              } else if (chunksInFlight === 0 && nextChunkIndex >= totalChunks) {
+                  // This was the last chunk in the batch
+                  // The completion is checked on the receiver side
+              }
+          }
+      };
+
+      // Start the initial batch of parallel transfers
+      for (let i = 0; i < PARALLEL_CHUNKS && nextChunkIndex < totalChunks; i++) {
+          sendChunk(nextChunkIndex++);
       }
-  }, [send, toast, updateFileStatus, updateFileProgress]);
+      
+  }, [send, updateFileStatus, updateFileProgress]);
 
 
   // Handle resume requests from the receiver
@@ -66,7 +90,7 @@ export function Header() {
           console.log(`Resume accepted for ${message.payload.name}, starting from ${message.payload.startChunk}`);
           const file = getFile(message.payload.name)?.file;
           if (file) {
-            sendFile(file, message.payload.startChunk);
+            sendFileInParallel(file, message.payload.startChunk);
           }
         }
       } catch (e) {
@@ -77,7 +101,7 @@ export function Header() {
     return () => {
       peer.removeListener('data', handleData);
     };
-  }, [peer, getFile, sendFile, updateFileStatus]);
+  }, [peer, getFile, sendFileInParallel]);
 
 
   const handleSend = async () => {
@@ -94,27 +118,34 @@ export function Header() {
     setIsPreparing(true);
     toast({ title: 'Preparing Files...', description: `Calculating checksums before sending.` });
 
+    const filesToSend: TransferFile[] = [];
     for (const transferFile of pendingFiles) {
       const file = transferFile.file;
-      
-      // 1. Calculate checksum and update state
       const checksum = await calculateFileChecksum(file);
       setFileChecksum(file.name, checksum);
-
-      // 2. Send metadata first
-      send({
-        type: 'metadata',
-        payload: { name: file.name, size: file.size, type: file.type, checksum }
-      });
-      updateFileStatus(file.name, 'sending');
+      filesToSend.push({...transferFile, checksum});
     }
-    
+
     setIsPreparing(false);
-    toast({ title: 'Sending Files', description: `Initiating transfer of ${pendingFiles.length} file(s) to ${activePeer.name}.` });
+    toast({ title: 'Sending Files', description: `Initiating transfer of ${filesToSend.length} file(s) to ${activePeer.name}.` });
 
 
-    for (const transferFile of pendingFiles) {
-        await sendFile(transferFile.file);
+    for (const transferFile of filesToSend) {
+        // Send metadata first and wait for potential resume request
+        send({
+          type: 'metadata',
+          payload: { name: transferFile.file.name, size: transferFile.file.size, type: transferFile.file.type, checksum: transferFile.checksum! }
+        });
+        
+        // Give a moment for the receiver to process metadata and request a resume
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        const currentTransferState = getFile(transferFile.file.name);
+        // If the peer has requested a resume, the status will be 'resuming' and the resume handler will start the transfer.
+        // Otherwise, start from the beginning.
+        if (currentTransferState && currentTransferState.status !== 'resuming') {
+          await sendFileInParallel(transferFile.file);
+        }
     }
   };
 

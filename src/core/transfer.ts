@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useLogStore } from './transfer-log';
-import { clearFileChunks, getFileChunks } from './db';
+import { clearFileChunks } from './db';
 
 export type TransferFile = {
   file: File;
@@ -55,10 +55,13 @@ export const useTransferStore = create<TransferState>((set, get) => ({
   startReceivingFile: (metadata) => {
     const { name, size, type, checksum, peerId } = metadata;
     const placeholderFile = new File([], name, { type });
+    // This is to create a File object with the right size for progress calculation
+    Object.defineProperty(placeholderFile, 'size', { value: size });
+
     const newTransferFile: TransferFile = {
         file: placeholderFile,
         progress: 0,
-        status: 'sending',
+        status: 'sending', // 'sending' is used for both up and down to show progress
         speed: 0,
         lastUpdateTime: 0,
         lastSentBytes: 0,
@@ -66,32 +69,41 @@ export const useTransferStore = create<TransferState>((set, get) => ({
         peerId,
         direction: 'received',
     };
-    set(state => ({
-        files: [...state.files.filter(f => f.file.name !== name), newTransferFile]
-    }));
+    set(state => {
+        const existingFile = state.files.find(f => f.file.name === name);
+        if (existingFile) {
+            return {
+                files: state.files.map(f => f.file.name === name ? { ...newTransferFile, progress: f.progress, lastSentBytes: f.lastSentBytes } : f)
+            }
+        }
+        return { files: [...state.files, newTransferFile] };
+    });
   },
-  updateFileProgress: (fileName: string, sentBytes: number) =>
+  updateFileProgress: (fileName: string, totalSentBytes: number) =>
     set((state) => {
       const now = Date.now();
       return {
         files: state.files.map((tf) => {
           if (tf.file.name === fileName) {
-            const progress = tf.file.size > 0 ? Math.round((sentBytes / tf.file.size) * 100) : 0;
+            const progress = tf.file.size > 0 ? Math.round((totalSentBytes / tf.file.size) * 100) : (tf.status === 'complete' ? 100 : 0);
+            
             const timeDiff = now - tf.lastUpdateTime;
             let speed = tf.speed;
-            // Calculate speed only if time diff is meaningful to avoid Infinity
-            if (timeDiff > 100) {
-                 const bytesDiff = sentBytes - tf.lastSentBytes;
+            
+            // Calculate speed only if time diff is meaningful
+            if (timeDiff > 500) { // Update speed every 500ms
+                 const bytesDiff = totalSentBytes - tf.lastSentBytes;
                  speed = bytesDiff / (timeDiff / 1000); // bytes per second
+                 return { 
+                  ...tf, 
+                  progress,
+                  speed: speed >= 0 ? speed : 0,
+                  lastUpdateTime: now,
+                  lastSentBytes: totalSentBytes,
+                 };
             }
-
-            return { 
-              ...tf, 
-              progress,
-              speed: speed >= 0 ? speed : tf.speed, // Keep last known speed if current is 0
-              lastUpdateTime: now,
-              lastSentBytes: sentBytes,
-            };
+            // If not enough time has passed, just update progress
+            return { ...tf, progress };
           }
           return tf;
         }),
@@ -108,8 +120,9 @@ export const useTransferStore = create<TransferState>((set, get) => ({
             status, 
             peerId: peerId || tf.peerId,
             speed: isFinished ? 0 : tf.speed,
+            progress: status === 'complete' ? 100 : tf.progress,
           };
-          if (isFinished) {
+          if (isFinished && tf.status !== status) { // Only log on status change
             addLog({
               fileName: updatedTf.file.name,
               fileSize: updatedTf.file.size,

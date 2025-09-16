@@ -16,7 +16,7 @@ export type PeerMessage =
   | { type: 'transfer-complete'; payload: { name: string; } }
   | { type: 'transfer-verified'; payload: { name: string; } }
   | { type: 'progress'; payload: { name: string; progress: number; } }
-  | { type: 'resume-request'; payload: { name: string; receivedChunks: number[] } }
+  | { type: 'resume-request'; payload: { name:string; receivedChunks: number[] } }
   | { type: 'resume-accepted'; payload: { name: string; startChunk: number } }
   | { type: 'resume-denied'; payload: { name: string; } };
 
@@ -51,6 +51,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     const newPeer = new Peer({
       initiator: initiator,
       trickle: true, 
+      objectMode: true, // Required for sending ArrayBuffer chunks
     });
     
     set({ peer: newPeer });
@@ -83,22 +84,34 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
     newPeer.on('data', async (data) => {
       try {
-        const message: PeerMessage = JSON.parse(data.toString());
+        // Data can be ArrayBuffer (for chunks) or string (for JSON messages)
+        const message: PeerMessage = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        // If it's a chunk, it will be an ArrayBuffer with metadata attached.
+        // For simple-peer, raw ArrayBuffers are not sent with properties, so we must wrap them
+        // or send JSON. Let's stick with JSON for all messages for consistency.
+        if (data instanceof ArrayBuffer) {
+            // This path shouldn't be hit if we wrap all messages in JSON
+            return;
+        }
+
+        const parsedMessage: PeerMessage = JSON.parse(data.toString());
+
         const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile, getFile } = useTransferStore.getState();
         const { updatePeerName, getPeer } = usePeerManagerStore.getState();
         const { toast } = useToast();
 
-        switch (message.type) {
+        switch (parsedMessage.type) {
           case 'handshake': {
-            const { peerId } = message.payload;
+            const { peerId } = parsedMessage.payload;
             if (get().activePeer) {
               updatePeerName(get().activePeer!.id, peerId)
             }
             break;
           }
           case 'metadata': {
-            console.log('Received metadata for:', message.payload.name);
-            const { name, size, type, checksum } = message.payload;
+            console.log('Received metadata for:', parsedMessage.payload.name);
+            const { name, size, type, checksum } = parsedMessage.payload;
             const peerId = get().activePeer?.id;
             if (!peerId) return;
 
@@ -131,7 +144,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           }
             
           case 'chunk': {
-            const { name, chunk, chunkIndex, totalChunks } = message.payload;
+            const { name, chunk: chunkData, chunkIndex, totalChunks } = parsedMessage.payload;
+            const chunk = new Uint8Array(Object.values(chunkData)).buffer;
+            
             const transferFile = getFile(name);
 
             if (transferFile && transferFile.status !== 'complete' && transferFile.status !== 'error') {
@@ -146,24 +161,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
               }
 
               const allChunkIndexes = await getReceivedChunkIndexes(name);
-
-              // Hardening: If DB was cleared mid-transfer, chunk indexes won't match. Reset and re-request.
-              if (chunkIndex > 0 && allChunkIndexes.length <= chunkIndex) {
-                 console.warn(`Inconsistency detected for ${name}. DB may have been cleared. Resetting transfer.`);
-                 updateFileStatus(name, 'error', get().activePeer?.id);
-                 await clearFileChunks(name);
-                 toast({ variant: 'destructive', title: 'Transfer Error', description: `Data for ${name} became corrupted. Retrying...` });
-                 // Request a full restart by sending a resume request with no chunks
-                 get().send({ type: 'resume-request', payload: { name, receivedChunks: [] } });
-                 return;
-              }
               
-              const receivedSize = allChunkIndexes.reduce((acc, index) => {
-                  // A rough estimation, assuming all chunks are roughly equal.
-                  const estimatedChunkSize = transferFile.file.size / totalChunks;
-                  return acc + estimatedChunkSize;
-              }, 0);
-              
+              // This is a rough estimation of progress
+              const receivedSize = allChunkIndexes.length * (transferFile.file.size / totalChunks);
               updateFileProgress(name, receivedSize);
 
               // Check if all chunks are received
@@ -200,46 +200,43 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             break;
           }
           case 'resume-request': {
-             const { name, receivedChunks } = message.payload;
+             const { name, receivedChunks } = parsedMessage.payload;
              const transferFile = getFile(name);
              if (transferFile && transferFile.direction === 'sent') {
-                const totalChunks = Math.ceil(transferFile.file.size / (64 * 1024));
+                const totalChunks = Math.ceil(transferFile.file.size / (128 * 1024)); // Use larger chunk size for resume logic
                 const allChunks = Array.from({ length: totalChunks }, (_, i) => i);
                 const missingChunks = allChunks.filter(i => !receivedChunks.includes(i));
                 
                 if (missingChunks.length > 0) {
                   const startChunk = missingChunks[0];
                   console.log(`Accepting resume request for ${name}, starting at chunk ${startChunk}`);
-                  send({ type: 'resume-accepted', payload: { name, startChunk } });
-                  // The sendFile function in header will be triggered by this
+                  get().send({ type: 'resume-accepted', payload: { name, startChunk } });
                 } else {
                   console.log(`Resume requested for ${name}, but no chunks are missing.`);
-                  // This could happen if verification failed on their end. We can just resend completion.
                   if(transferFile.status === 'complete') {
-                    send({ type: 'transfer-verified', payload: { name } });
+                    get().send({ type: 'transfer-verified', payload: { name } });
                   }
                 }
              } else {
                   console.log(`Denied resume for ${name}, file not found or direction mismatch.`);
-                  send({ type: 'resume-denied', payload: { name } });
+                  get().send({ type: 'resume-denied', payload: { name } });
              }
              break;
           }
           case 'resume-denied': {
-             const { name } = message.payload;
+             const { name } = parsedMessage.payload;
              console.log(`Resume denied for ${name}. Starting from scratch.`);
              await clearFileChunks(name);
              const file = getFile(name);
              if (file && file.peerId) {
-                // Re-initiate the file receiving process
                 startReceivingFile({ name, size: file.file.size, type: file.file.type, checksum: file.checksum!, peerId: file.peerId });
              }
              break;
           }
           case 'transfer-verified':
-            console.log('Transfer verified for:', message.payload.name);
-            updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);
-            toast({ title: "Transfer Complete", description: `${message.payload.name} was successfully sent and verified by the peer.` });
+            console.log('Transfer verified for:', parsedMessage.payload.name);
+            updateFileStatus(parsedMessage.payload.name, 'complete', get().activePeer?.id);
+            toast({ title: "Transfer Complete", description: `${parsedMessage.payload.name} was successfully sent and verified by the peer.` });
             break;
         }
       } catch (error) {
@@ -282,7 +279,13 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
   send: (message) => {
     if (get().status === 'connected') {
-        get().peer?.send(JSON.stringify(message));
+        const messageString = JSON.stringify(message, (key, value) => {
+            if (value instanceof ArrayBuffer) {
+                return { type: 'Buffer', data: Array.from(new Uint8Array(value)) };
+            }
+            return value;
+        });
+        get().peer?.send(messageString);
     } else {
       console.warn('Cannot send data, peer is not connected.');
     }
