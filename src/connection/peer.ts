@@ -2,15 +2,19 @@
 import { create } from 'zustand';
 import Peer, { Instance, SignalData } from 'simple-peer';
 import { useTransferStore } from '@/core/transfer';
-import { Peer as PeerInfo, usePeerManagerStore } from '@/core/peer-manager';
+import { Peer as PeerInfo, usePeerManagerStore, useKeyStore } from '@/core/peer-manager';
 import { useToast } from '@/hooks/use-toast';
 import { addChunk, getFileChunks, getReceivedChunkIndexes, clearFileChunks } from '@/core/db';
 
-export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'verifying';
 
 // Define a structured message type for communication
 export type PeerMessage = 
-  | { type: 'handshake'; payload: { message: string, peerId: string } }
+  | { type: 'handshake'; payload: { peerId: string } }
+  | { type: 'key-exchange'; payload: { publicKey: JsonWebKey } }
+  | { type: 'challenge-request'; payload: { nonce: string } }
+  | { type: 'challenge-response'; payload: { nonce: string; signature: ArrayBuffer } }
+  | { type: 'challenge-verified'; payload: {} }
   | { type: 'metadata'; payload: { name: string; size: number; type: string; checksum: string; } }
   | { type: 'chunk'; payload: { name: string; chunk: ArrayBuffer; chunkIndex: number; totalChunks: number; } }
   | { type: 'transfer-complete'; payload: { name: string; } }
@@ -51,7 +55,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     const newPeer = new Peer({
       initiator: initiator,
       trickle: true, 
-      objectMode: true, // Required for sending ArrayBuffer chunks
+      objectMode: true,
     });
     
     set({ peer: newPeer });
@@ -74,44 +78,95 @@ export const usePeerStore = create<PeerState>((set, get) => ({
       }
     });
 
-    newPeer.on('connect', () => {
-      set({ status: 'connected' });
-      if (get().activePeer) {
-        usePeerManagerStore.getState().updatePeerStatus(get().activePeer!.id, 'connected');
+    newPeer.on('connect', async () => {
+      const { publicKey } = useKeyStore.getState();
+      const peerInfo = get().activePeer;
+
+      if (peerInfo?.trusted && peerInfo.publicKey) {
+          console.log("Attempting cryptographic verification with trusted peer...");
+          set({ status: 'verifying' });
+          if (get().activePeer) {
+            usePeerManagerStore.getState().updatePeerStatus(get().activePeer!.id, 'verifying');
+          }
+          const nonce = crypto.randomUUID();
+          get().send({ type: 'challenge-request', payload: { nonce } });
+
+      } else {
+          set({ status: 'connected' });
+          if (get().activePeer) {
+            usePeerManagerStore.getState().updatePeerStatus(get().activePeer!.id, 'connected');
+          }
+          if (publicKey) {
+            get().send({ type: 'key-exchange', payload: { publicKey } });
+          }
       }
-      get().send({ type: 'handshake', payload: { message: 'Hello!', peerId: usePeerManagerStore.getState().myId } });
     });
 
     newPeer.on('data', async (data) => {
       try {
-        // Data can be ArrayBuffer (for chunks) or string (for JSON messages)
-        const message: PeerMessage = typeof data === 'string' ? JSON.parse(data) : data;
-        
-        // If it's a chunk, it will be an ArrayBuffer with metadata attached.
-        // For simple-peer, raw ArrayBuffers are not sent with properties, so we must wrap them
-        // or send JSON. Let's stick with JSON for all messages for consistency.
-        if (data instanceof ArrayBuffer) {
-            // This path shouldn't be hit if we wrap all messages in JSON
-            return;
-        }
-
-        const parsedMessage: PeerMessage = JSON.parse(data.toString());
+        const message: PeerMessage = JSON.parse(data.toString());
 
         const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile, getFile } = useTransferStore.getState();
-        const { updatePeerName, getPeer } = usePeerManagerStore.getState();
+        const { updatePeerName, updatePeerPublicKey, getPeer } = usePeerManagerStore.getState();
+        const { signData, verifySignature, publicKey: myPublicKey } = useKeyStore.getState();
         const { toast } = useToast();
 
-        switch (parsedMessage.type) {
+        switch (message.type) {
           case 'handshake': {
-            const { peerId } = parsedMessage.payload;
+            const { peerId } = message.payload;
             if (get().activePeer) {
               updatePeerName(get().activePeer!.id, peerId)
             }
             break;
           }
+          case 'key-exchange': {
+            const { publicKey } = message.payload;
+            const peerId = get().activePeer?.id;
+            if (peerId) {
+                updatePeerPublicKey(peerId, publicKey);
+                // Respond with our own public key if we haven't already
+                if (myPublicKey) {
+                    get().send({ type: 'key-exchange', payload: { publicKey: myPublicKey } });
+                }
+            }
+            break;
+          }
+          case 'challenge-request': {
+             const { nonce } = message.payload;
+             const signature = await signData(nonce);
+             get().send({ type: 'challenge-response', payload: { nonce, signature } });
+             break;
+          }
+          case 'challenge-response': {
+            const { nonce, signature } = message.payload;
+            const peerInfo = get().activePeer;
+            if (peerInfo?.publicKey) {
+                const isValid = await verifySignature(peerInfo.publicKey, signature, nonce);
+                if (isValid) {
+                    console.log("Cryptographic verification successful!");
+                    get().send({ type: 'challenge-verified', payload: {} });
+                    set({ status: 'connected' });
+                    usePeerManagerStore.getState().updatePeerStatus(peerInfo.id, 'connected');
+                } else {
+                    console.error("Cryptographic verification failed!");
+                    toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not verify the identity of the trusted peer.' });
+                    get().destroyPeer();
+                }
+            }
+            break;
+          }
+           case 'challenge-verified': {
+                console.log("Peer verified our challenge response.");
+                const peerInfo = get().activePeer;
+                if(peerInfo) {
+                    set({ status: 'connected' });
+                    usePeerManagerStore.getState().updatePeerStatus(peerInfo.id, 'connected');
+                }
+                break;
+            }
           case 'metadata': {
-            console.log('Received metadata for:', parsedMessage.payload.name);
-            const { name, size, type, checksum } = parsedMessage.payload;
+            console.log('Received metadata for:', message.payload.name);
+            const { name, size, type, checksum } = message.payload;
             const peerId = get().activePeer?.id;
             if (!peerId) return;
 
@@ -120,7 +175,6 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                 if (receivedChunks.length > 0) {
                     console.log(`Found ${receivedChunks.length} existing chunks for ${name}. Requesting resume.`);
                     updateFileStatus(name, 'resuming', peerId);
-                    // We start receiving so the UI updates, but also send a resume request.
                     startReceivingFile({ name, size, type, checksum, peerId });
                     get().send({ type: 'resume-request', payload: { name, receivedChunks } });
                 } else {
@@ -144,7 +198,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
           }
             
           case 'chunk': {
-            const { name, chunk: chunkData, chunkIndex, totalChunks } = parsedMessage.payload;
+            const { name, chunk: chunkData, chunkIndex, totalChunks } = message.payload;
             const chunk = new Uint8Array(Object.values(chunkData)).buffer;
             
             const transferFile = getFile(name);
@@ -161,12 +215,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
               }
 
               const allChunkIndexes = await getReceivedChunkIndexes(name);
-              
-              // This is a rough estimation of progress
               const receivedSize = allChunkIndexes.length * (transferFile.file.size / totalChunks);
               updateFileProgress(name, receivedSize);
 
-              // Check if all chunks are received
               if (allChunkIndexes.length === totalChunks) {
                  updateFileStatus(name, 'verifying', get().activePeer?.id);
                  const chunksFromDb = await getFileChunks(name, totalChunks);
@@ -181,7 +232,6 @@ export const usePeerStore = create<PeerState>((set, get) => ({
                  }
 
                  const fileBlob = new Blob(validChunks, { type: transferFile.file.type });
-                 
                  const receivedChecksum = await calculateFileChecksum(fileBlob);
                  
                  if (receivedChecksum === transferFile.checksum) {
@@ -200,10 +250,10 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             break;
           }
           case 'resume-request': {
-             const { name, receivedChunks } = parsedMessage.payload;
+             const { name, receivedChunks } = message.payload;
              const transferFile = getFile(name);
              if (transferFile && transferFile.direction === 'sent') {
-                const totalChunks = Math.ceil(transferFile.file.size / (128 * 1024)); // Use larger chunk size for resume logic
+                const totalChunks = Math.ceil(transferFile.file.size / (128 * 1024)); 
                 const allChunks = Array.from({ length: totalChunks }, (_, i) => i);
                 const missingChunks = allChunks.filter(i => !receivedChunks.includes(i));
                 
@@ -224,7 +274,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
              break;
           }
           case 'resume-denied': {
-             const { name } = parsedMessage.payload;
+             const { name } = message.payload;
              console.log(`Resume denied for ${name}. Starting from scratch.`);
              await clearFileChunks(name);
              const file = getFile(name);
@@ -234,9 +284,9 @@ export const usePeerStore = create<PeerState>((set, get) => ({
              break;
           }
           case 'transfer-verified':
-            console.log('Transfer verified for:', parsedMessage.payload.name);
-            updateFileStatus(parsedMessage.payload.name, 'complete', get().activePeer?.id);
-            toast({ title: "Transfer Complete", description: `${parsedMessage.payload.name} was successfully sent and verified by the peer.` });
+            console.log('Transfer verified for:', message.payload.name);
+            updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);
+            toast({ title: "Transfer Complete", description: `${message.payload.name} was successfully sent and verified by the peer.` });
             break;
         }
       } catch (error) {
@@ -278,16 +328,22 @@ export const usePeerStore = create<PeerState>((set, get) => ({
   },
 
   send: (message) => {
-    if (get().status === 'connected') {
+    const peer = get().peer;
+    // Allow sending messages during verification phase
+    if (peer?.connected) {
         const messageString = JSON.stringify(message, (key, value) => {
-            if (value instanceof ArrayBuffer) {
-                return { type: 'Buffer', data: Array.from(new Uint8Array(value)) };
-            }
-            return value;
+          // Custom serializer for ArrayBuffer
+          if (value instanceof ArrayBuffer) {
+            return { type: 'Buffer', data: Array.from(new Uint8Array(value)) };
+          }
+          if (value && typeof value === 'object' && value.type === 'Buffer' && Array.isArray(value.data)) {
+             return new Uint8Array(value.data).buffer;
+          }
+          return value;
         });
-        get().peer?.send(messageString);
+        peer.send(messageString);
     } else {
-      console.warn('Cannot send data, peer is not connected.');
+      console.warn('Cannot send data, peer is not connected or ready.', {status: get().status, peer});
     }
   },
   

@@ -11,7 +11,7 @@ import { usePeerStore } from "@/connection/peer";
 import { useToast } from "@/hooks/use-toast";
 import pako from 'pako';
 import { QrCodeDialog } from "@/components/qr-code-dialog";
-import { usePeerManagerStore } from "@/core/peer-manager";
+import { usePeerManagerStore, useKeyStore } from "@/core/peer-manager";
 
 const decodeOfferFromUrl = (encodedOffer: string): string | null => {
     try {
@@ -33,7 +33,12 @@ export default function Home() {
   const { toast } = useToast();
   const [showQrDialog, setShowQrDialog] = useState(false);
   const autoConnectAttempted = useRef(false);
+  const { generateKeys, isGenerating } = useKeyStore();
 
+  // Generate crypto keys on startup
+  useEffect(() => {
+    generateKeys();
+  }, [generateKeys]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -82,9 +87,9 @@ export default function Home() {
 
   // Auto-reconnect to trusted peers
   useEffect(() => {
-    // Only run on initial mount and if no connection is active/pending
-    if (peerStatus === 'disconnected' && !autoConnectAttempted.current && peers.length > 0) {
-      const trustedPeer = peers.find(p => p.trusted && p.offer);
+    // Only run on initial mount and if no connection is active/pending and keys are ready
+    if (peerStatus === 'disconnected' && !autoConnectAttempted.current && peers.length > 0 && !isGenerating) {
+      const trustedPeer = peers.find(p => p.trusted && p.offer && p.publicKey);
       if (trustedPeer) {
         console.log(`Attempting to auto-reconnect to trusted peer: ${trustedPeer.name}`);
         toast({
@@ -95,7 +100,7 @@ export default function Home() {
       }
       autoConnectAttempted.current = true; // Ensure this runs only once
     }
-  }, [peers, peerStatus, connectToPeer, toast]);
+  }, [peers, peerStatus, connectToPeer, toast, isGenerating]);
 
 
   return (

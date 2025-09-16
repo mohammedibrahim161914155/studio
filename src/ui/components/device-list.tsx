@@ -3,18 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/
 import { Avatar, AvatarFallback } from "@/ui/avatar";
 import { usePeerStore } from "@/connection/peer";
 import { usePeerManagerStore, Peer } from "@/core/peer-manager";
-import { Wifi, WifiOff, Loader2, Trash2, Edit, Check, X, ShieldCheck } from "lucide-react";
+import { Wifi, WifiOff, Loader2, Trash2, Edit, Check, X, ShieldCheck, ShieldAlert, BadgeCheck } from "lucide-react";
 import { Button } from "@/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Input } from "@/ui/input";
-import { Switch } from "@/ui/switch";
-import { Label } from "@/ui/label";
 
-const StatusIcon = ({ status }: { status: Peer['status'] }) => {
-  switch (status) {
+const StatusIcon = ({ peer, isActive }: { peer: Peer, isActive: boolean }) => {
+  const currentStatus = isActive ? usePeerStore.getState().status : peer.status;
+  
+  switch (currentStatus) {
     case 'connected':
-      return <Wifi className="w-5 h-5 text-green-500" />;
+      return peer.trusted ? <BadgeCheck className="w-5 h-5 text-green-500" /> : <Wifi className="w-5 h-5 text-green-500" />;
+    case 'verifying':
+      return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
     case 'connecting':
       return <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />;
     case 'error':
@@ -25,7 +27,7 @@ const StatusIcon = ({ status }: { status: Peer['status'] }) => {
 };
 
 const PeerItem = ({ peer }: { peer: Peer }) => {
-    const { connectToPeer, activePeer, destroyPeer } = usePeerStore();
+    const { connectToPeer, activePeer, destroyPeer, status } = usePeerStore();
     const { removePeer, updatePeerName, updatePeerTrusted } = usePeerManagerStore();
     const { toast } = useToast();
     const [isEditing, setIsEditing] = useState(false);
@@ -34,7 +36,7 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
     const isCurrentlyActive = activePeer?.id === peer.id;
 
     const handleConnect = () => {
-        if (isCurrentlyActive && usePeerStore.getState().status === 'connected') {
+        if (isCurrentlyActive && (status === 'connected' || status === 'verifying')) {
             destroyPeer();
             toast({ title: "Disconnected", description: `Disconnected from ${peer.name}.` });
         } else {
@@ -56,15 +58,38 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
         }
     };
 
+    const handleTrustToggle = () => {
+        if (peer.publicKey) {
+            updatePeerTrusted(peer.id, !peer.trusted);
+            toast({
+                title: peer.trusted ? "Device Untrusted" : "Device Trusted",
+                description: `${peer.name} is ${peer.trusted ? 'no longer a trusted device.' : 'now a trusted device.'}`
+            });
+        } else {
+            toast({
+                variant: 'destructive',
+                title: "Cannot Trust Device",
+                description: "A secure key exchange has not been completed. Please reconnect to the device."
+            });
+        }
+    }
+    
+    const getStatusText = () => {
+        if(!isCurrentlyActive) return peer.status;
+        if(status === 'verifying') return 'verifying...';
+        return status;
+    }
+
+
     return (
-        <li className="flex flex-col gap-2 p-2 rounded-lg transition-colors hover:bg-muted/50 border-b">
+        <li className="flex flex-col gap-3 p-3 rounded-lg transition-colors hover:bg-muted/50 border-b">
             <div className="flex items-center gap-4">
                 <Avatar className="h-10 w-10 bg-muted flex items-center justify-center">
                     <AvatarFallback className="bg-transparent">
-                        <StatusIcon status={isCurrentlyActive ? usePeerStore.getState().status : peer.status} />
+                        <StatusIcon peer={peer} isActive={isCurrentlyActive} />
                     </AvatarFallback>
                 </Avatar>
-                <div className="flex-1">
+                <div className="flex-1 overflow-hidden">
                     {isEditing ? (
                         <div className="flex items-center gap-2">
                             <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8" />
@@ -73,20 +98,21 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
                         </div>
                     ) : (
                        <div className="flex items-center gap-2">
-                         <p className="font-medium">{peer.name}</p>
-                         {peer.trusted && <ShieldCheck className="w-4 h-4 text-primary" title="Trusted Device"/>}
+                         <p className="font-medium truncate">{peer.name}</p>
                        </div>
                     )}
-                    <p className="text-sm-text text-muted-foreground truncate">{isCurrentlyActive ? usePeerStore.getState().status : peer.status}</p>
+                    <p className="text-sm-text text-muted-foreground truncate">{getStatusText()}</p>
                 </div>
-                 <Button size="sm" variant={isCurrentlyActive && usePeerStore.getState().status === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24">
-                    {isCurrentlyActive && usePeerStore.getState().status === 'connected' ? 'Disconnect' : 'Connect'}
+                 <Button size="sm" variant={isCurrentlyActive && status === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24" disabled={isCurrentlyActive && status === 'verifying'}>
+                    {isCurrentlyActive && status === 'connected' ? 'Disconnect' : 'Connect'}
                 </Button>
             </div>
             <div className="flex items-center justify-between pl-14">
                 <div className="flex items-center gap-2">
-                    <Switch id={`trusted-${peer.id}`} checked={peer.trusted} onCheckedChange={(checked) => updatePeerTrusted(peer.id, checked)} />
-                    <Label htmlFor={`trusted-${peer.id}`} className="text-sm-text text-muted-foreground cursor-pointer">Auto-accept transfers</Label>
+                    <Button onClick={handleTrustToggle} variant="outline" size="sm" disabled={!peer.publicKey}>
+                        {peer.trusted ? <ShieldAlert className="w-4 h-4"/> : <ShieldCheck className="w-4 h-4"/>}
+                        <span>{peer.trusted ? 'Untrust' : 'Trust Device'}</span>
+                    </Button>
                 </div>
                 <div className="flex items-center gap-1">
                     {!isEditing && <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditing(true)}><Edit className="w-4 h-4" /></Button>}
