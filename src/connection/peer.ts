@@ -5,6 +5,7 @@ import { useTransferStore } from '@/core/transfer';
 import { Peer as PeerInfo, usePeerManagerStore, useKeyStore } from '@/core/peer-manager';
 import { useToast } from '@/hooks/use-toast';
 import { addChunk, getFileChunks, getReceivedChunkIndexes, clearFileChunks } from '@/core/db';
+import { useBenchmarkStore } from '@/core/benchmark';
 
 export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'verifying';
 
@@ -22,7 +23,11 @@ export type PeerMessage =
   | { type: 'progress'; payload: { name: string; progress: number; } }
   | { type: 'resume-request'; payload: { name:string; receivedChunks: number[] } }
   | { type: 'resume-accepted'; payload: { name: string; startChunk: number } }
-  | { type: 'resume-denied'; payload: { name: string; } };
+  | { type: 'resume-denied'; payload: { name: string; } }
+  | { type: 'benchmark-start'; payload: { runId: string, size: number, chunkSize: number } }
+  | { type: 'benchmark-chunk'; payload: { runId: string, index: number, chunk: ArrayBuffer } }
+  | { type: 'benchmark-end'; payload: { runId: string } }
+  | { type: 'benchmark-results'; payload: { runId: string, duration: number } };
 
 
 type PeerState = {
@@ -109,6 +114,7 @@ export const usePeerStore = create<PeerState>((set, get) => ({
         const { updateFileProgress, updateFileStatus, calculateFileChecksum, startReceivingFile, getFile } = useTransferStore.getState();
         const { updatePeerName, updatePeerPublicKey, getPeer } = usePeerManagerStore.getState();
         const { signData, verifySignature, publicKey: myPublicKey } = useKeyStore.getState();
+        const benchmarkStore = useBenchmarkStore.getState();
         const { toast } = useToast();
 
         switch (message.type) {
@@ -124,7 +130,6 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             const peerId = get().activePeer?.id;
             if (peerId) {
                 updatePeerPublicKey(peerId, publicKey);
-                // Respond with our own public key if we haven't already
                 if (myPublicKey) {
                     get().send({ type: 'key-exchange', payload: { publicKey: myPublicKey } });
                 }
@@ -288,6 +293,23 @@ export const usePeerStore = create<PeerState>((set, get) => ({
             updateFileStatus(message.payload.name, 'complete', get().activePeer?.id);
             toast({ title: "Transfer Complete", description: `${message.payload.name} was successfully sent and verified by the peer.` });
             break;
+
+          // Benchmark handlers
+          case 'benchmark-start':
+            benchmarkStore.startReceiving(message.payload);
+            break;
+          case 'benchmark-chunk':
+            benchmarkStore.receiveChunk(message.payload);
+            break;
+          case 'benchmark-end':
+            const duration = await benchmarkStore.finishReceiving(message.payload.runId);
+            if (duration !== null) {
+              get().send({ type: 'benchmark-results', payload: { runId: message.payload.runId, duration } });
+            }
+            break;
+          case 'benchmark-results':
+            benchmarkStore.setSenderResults(message.payload);
+            break;
         }
       } catch (error) {
         console.error("Error processing received data:", error, data);
@@ -329,10 +351,8 @@ export const usePeerStore = create<PeerState>((set, get) => ({
 
   send: (message) => {
     const peer = get().peer;
-    // Allow sending messages during verification phase
     if (peer?.connected) {
         const messageString = JSON.stringify(message, (key, value) => {
-          // Custom serializer for ArrayBuffer
           if (value instanceof ArrayBuffer) {
             return { type: 'Buffer', data: Array.from(new Uint8Array(value)) };
           }
@@ -360,6 +380,6 @@ export const usePeerStore = create<PeerState>((set, get) => ({
     addPeer(newPeerInfo);
 
     const peer = get().createPeer(false, newPeerInfo as PeerInfo);
-    peer.signal(offer); // This will trigger our peer to generate an answer
+    peer.signal(offer);
   }
 }));
