@@ -1,6 +1,6 @@
 
 'use client';
-import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { FileDropzone } from "@/components/file-dropzone";
 import { TransferList } from "@/components/transfer-list";
@@ -28,10 +28,10 @@ const decodeOfferFromUrl = (encodedOffer: string): string | null => {
 
 
 export default function Home() {
-  const { connectFromOffer, connectToPeer, status: peerStatus } = usePeerStore();
+  const { connectFromOffer, connectToPeer, createPeerAsInitiator, status: peerStatus } = usePeerStore();
   const { peers } = usePeerManagerStore();
   const { toast } = useToast();
-  const [showQrDialog, setShowQrDialog] = useState(false);
+  const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
   const autoConnectAttempted = useRef(false);
   const { generateKeys, isGenerating } = useKeyStore();
 
@@ -39,6 +39,14 @@ export default function Home() {
   useEffect(() => {
     generateKeys();
   }, [generateKeys]);
+
+  // Pre-generate an offer when the app loads and is not connected
+  useEffect(() => {
+    if (peerStatus === 'disconnected' && !isGenerating) {
+        // This will create a peer and generate an offer in the background
+        createPeerAsInitiator();
+    }
+  }, [peerStatus, isGenerating, createPeerAsInitiator]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -53,7 +61,7 @@ export default function Home() {
             try {
                 const parsedSignal = JSON.parse(decodedOffer);
                 connectFromOffer(parsedSignal);
-                setShowQrDialog(true);
+                setIsQrDialogOpen(true);
                 toast({
                     title: "Connecting via Link",
                     description: "Received a connection offer from the link. Please copy your answer and send it back to the sender.",
@@ -89,7 +97,7 @@ export default function Home() {
   useEffect(() => {
     // Only run on initial mount and if no connection is active/pending and keys are ready
     if (peerStatus === 'disconnected' && !autoConnectAttempted.current && peers.length > 0 && !isGenerating) {
-      const trustedPeer = peers.find(p => p.trusted && p.offer && p.publicKey);
+      const trustedPeer = peers.find(p => p.trusted && p.publicKey);
       if (trustedPeer) {
         console.log(`Attempting to auto-reconnect to trusted peer: ${trustedPeer.name}`);
         toast({
@@ -128,7 +136,7 @@ export default function Home() {
         </div>
       </div>
     </SidebarProvider>
-    <QrCodeDialog open={showQrDialog} onOpenChange={setShowQrDialog} />
+    <QrCodeDialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen} />
     </>
   );
 }

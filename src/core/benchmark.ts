@@ -41,7 +41,7 @@ type BenchmarkState = {
 const benchmarkData = new Map<string, {
     startTime: number,
     totalChunks: number,
-    chunks: Map<number, ArrayBuffer>
+    receivedChunks: number
 }>();
 
 
@@ -59,14 +59,14 @@ export const useBenchmarkStore = create<BenchmarkState>(
 
             startBenchmark: async () => {
                 const { status, _reset } = get();
-                const { send } = usePeerStore.getState();
+                const { sendJson, sendBenchmarkChunk } = usePeerStore.getState();
                 if (status !== 'idle') return;
 
                 _reset();
                 const runId = uuidv4();
                 set({ status: 'sending', currentRunId: runId });
 
-                send({ type: 'benchmark-start', payload: { runId, size: BENCHMARK_SIZE, chunkSize: BENCHMARK_CHUNK_SIZE } });
+                sendJson({ type: 'benchmark-start', payload: { runId, size: BENCHMARK_SIZE, chunkSize: BENCHMARK_CHUNK_SIZE } });
                 
                 const totalChunks = Math.ceil(BENCHMARK_SIZE / BENCHMARK_CHUNK_SIZE);
                 const chunk = new ArrayBuffer(BENCHMARK_CHUNK_SIZE);
@@ -78,15 +78,15 @@ export const useBenchmarkStore = create<BenchmarkState>(
                         get()._reset();
                         return;
                     }
-                    send({ type: 'benchmark-chunk', payload: { runId, index: i, chunk } });
+                    sendBenchmarkChunk({ runId, index: i, chunk });
                     set({ progress: (i / totalChunks) * 100 });
                     // Yield to the event loop occasionally to prevent freezing the UI
-                    if (i % 10 === 0) {
+                    if (i % 50 === 0) {
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
                 }
                 
-                send({ type: 'benchmark-end', payload: { runId } });
+                sendJson({ type: 'benchmark-end', payload: { runId } });
                 set({ progress: 100, status: 'verifying' });
             },
 
@@ -112,7 +112,7 @@ export const useBenchmarkStore = create<BenchmarkState>(
                 benchmarkData.set(runId, {
                     startTime: Date.now(),
                     totalChunks: Math.ceil(size / chunkSize),
-                    chunks: new Map(),
+                    receivedChunks: 0
                 });
                 set({ status: 'receiving', currentRunId: runId, progress: 0 });
             },
@@ -121,15 +121,15 @@ export const useBenchmarkStore = create<BenchmarkState>(
                 const run = benchmarkData.get(runId);
                 if (!run) return;
                 
-                run.chunks.set(index, chunk);
-                const progress = (run.chunks.size / run.totalChunks) * 100;
+                run.receivedChunks++;
+                const progress = (run.receivedChunks / run.totalChunks) * 100;
                 set({ progress });
             },
 
             finishReceiving: async (runId) => {
                 const run = benchmarkData.get(runId);
-                 if (!run || run.chunks.size !== run.totalChunks) {
-                    console.error('Benchmark failed: incomplete data.');
+                 if (!run || run.receivedChunks !== run.totalChunks) {
+                    console.error('Benchmark failed: incomplete data.', {run});
                     get()._reset();
                     benchmarkData.delete(runId);
                     return null;
@@ -155,4 +155,3 @@ export const useBenchmarkStore = create<BenchmarkState>(
         }
     )
 );
-

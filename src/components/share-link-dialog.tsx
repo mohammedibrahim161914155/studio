@@ -1,7 +1,7 @@
 
 "use client"
 
-import { Button } from "@/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,9 +11,9 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
-} from "@/ui/dialog";
-import { Input } from "@/ui/input";
-import { Label } from "@/ui/label";
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Link as LinkIcon, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePeerStore } from "@/connection/peer";
@@ -30,17 +30,10 @@ const encodeOfferForUrl = (offer: object): string => {
 
 export function ShareLinkDialog() {
   const { toast } = useToast();
-  const { createPeer, currentOffer, destroyPeer } = usePeerStore();
+  const createPeerAsInitiator = usePeerStore(s => s.createPeerAsInitiator);
+  const currentOffer = usePeerStore(s => s.currentOffer);
   const [open, setOpen] = useState(false);
   const [shareLink, setShareLink] = useState("");
-
-  useEffect(() => {
-    // When the dialog is closed, clean up the peer and link
-    if (!open) {
-      destroyPeer();
-      setShareLink("");
-    }
-  }, [open, destroyPeer]);
 
   useEffect(() => {
     if (open && currentOffer) {
@@ -48,12 +41,14 @@ export function ShareLinkDialog() {
       const url = new URL(window.location.href);
       url.hash = `#/connect/${encodedOffer}`;
       setShareLink(url.toString());
+    } else if (!open) {
+      setShareLink("");
     }
   }, [open, currentOffer]);
 
   const handleGenerateLink = () => {
     setShareLink(""); // Reset previous link
-    createPeer(true); // Create a new peer as initiator to generate an offer
+    createPeerAsInitiator(); // Create a new peer as initiator to generate an offer
   };
 
   const copyLink = () => {
@@ -68,7 +63,7 @@ export function ShareLinkDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" onClick={() => { setOpen(true); handleGenerateLink(); }}>
+        <Button variant="outline" onClick={handleGenerateLink}>
           <LinkIcon />
           <span>Share via Link</span>
         </Button>

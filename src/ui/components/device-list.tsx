@@ -1,16 +1,17 @@
+
 'use client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
-import { Avatar, AvatarFallback } from "@/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { usePeerStore } from "@/connection/peer";
-import { usePeerManagerStore, Peer } from "@/core/peer-manager";
+import { usePeerManagerStore, type Peer } from "@/core/peer-manager";
 import { Wifi, WifiOff, Loader2, Trash2, Edit, Check, X, ShieldCheck, ShieldAlert, BadgeCheck } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { Input } from "@/ui/input";
+import { Input } from "@/components/ui/input";
 
 const StatusIcon = ({ peer, isActive }: { peer: Peer, isActive: boolean }) => {
-  const currentStatus = isActive ? usePeerStore.getState().status : peer.status;
+  const currentStatus = isActive ? usePeerStore(s => s.status) : peer.status;
   
   switch (currentStatus) {
     case 'connected':
@@ -27,7 +28,8 @@ const StatusIcon = ({ peer, isActive }: { peer: Peer, isActive: boolean }) => {
 };
 
 const PeerItem = ({ peer }: { peer: Peer }) => {
-    const { connectToPeer, activePeer, destroyPeer, status } = usePeerStore();
+    const { connectToPeer, destroyPeer, status } = usePeerStore();
+    const activePeer = usePeerStore(s => s.activePeer);
     const { removePeer, updatePeerName, updatePeerTrusted } = usePeerManagerStore();
     const { toast } = useToast();
     const [isEditing, setIsEditing] = useState(false);
@@ -39,7 +41,7 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
         if (isCurrentlyActive && (status === 'connected' || status === 'verifying')) {
             destroyPeer();
             toast({ title: "Disconnected", description: `Disconnected from ${peer.name}.` });
-        } else {
+        } else if (status === 'disconnected') {
             toast({ title: "Connecting...", description: `Attempting to connect to ${peer.name}.` });
             connectToPeer(peer);
         }
@@ -80,6 +82,7 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
         return status;
     }
 
+    const isConnectButtonDisabled = status !== 'disconnected' && !isCurrentlyActive;
 
     return (
         <li className="flex flex-col gap-3 p-3 rounded-lg transition-colors hover:bg-muted/50 border-b">
@@ -103,7 +106,7 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
                     )}
                     <p className="text-sm-text text-muted-foreground truncate">{getStatusText()}</p>
                 </div>
-                 <Button size="sm" variant={isCurrentlyActive && status === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24" disabled={isCurrentlyActive && status === 'verifying'}>
+                 <Button size="sm" variant={isCurrentlyActive && status === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24" disabled={isConnectButtonDisabled}>
                     {isCurrentlyActive && status === 'connected' ? 'Disconnect' : 'Connect'}
                 </Button>
             </div>
