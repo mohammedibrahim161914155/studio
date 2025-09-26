@@ -28,20 +28,24 @@ const StatusIcon = ({ peer, isActive }: { peer: Peer, isActive: boolean }) => {
 };
 
 const PeerItem = ({ peer }: { peer: Peer }) => {
-    const { connectToPeer, destroyPeer, status } = usePeerStore();
-    const activePeer = usePeerStore(s => s.activePeer);
+    // Select granular state and actions
+    const connectToPeer = usePeerStore(s => s.connectToPeer);
+    const destroyPeer = usePeerStore(s => s.destroyPeer);
+    const peerStatus = usePeerStore(s => s.status);
+    const activePeerId = usePeerStore(s => s.activePeer?.id);
+    
     const { removePeer, updatePeerName, updatePeerTrusted } = usePeerManagerStore();
     const { toast } = useToast();
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(peer.name);
 
-    const isCurrentlyActive = activePeer?.id === peer.id;
+    const isCurrentlyActive = activePeerId === peer.id;
 
     const handleConnect = () => {
-        if (isCurrentlyActive && (status === 'connected' || status === 'verifying')) {
+        if (isCurrentlyActive && (peerStatus === 'connected' || peerStatus === 'verifying')) {
             destroyPeer();
             toast({ title: "Disconnected", description: `Disconnected from ${peer.name}.` });
-        } else if (status === 'disconnected') {
+        } else if (peerStatus === 'disconnected') {
             toast({ title: "Connecting...", description: `Attempting to connect to ${peer.name}.` });
             connectToPeer(peer);
         }
@@ -78,11 +82,11 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
     
     const getStatusText = () => {
         if(!isCurrentlyActive) return peer.status;
-        if(status === 'verifying') return 'verifying...';
-        return status;
+        if(peerStatus === 'verifying') return 'verifying...';
+        return peerStatus;
     }
 
-    const isConnectButtonDisabled = status !== 'disconnected' && !isCurrentlyActive;
+    const isConnectButtonDisabled = peerStatus !== 'disconnected' && !isCurrentlyActive;
 
     return (
         <li className="flex flex-col gap-3 p-3 rounded-lg transition-colors hover:bg-muted/50 border-b">
@@ -106,8 +110,8 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
                     )}
                     <p className="text-sm-text text-muted-foreground truncate">{getStatusText()}</p>
                 </div>
-                 <Button size="sm" variant={isCurrentlyActive && status === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24" disabled={isConnectButtonDisabled}>
-                    {isCurrentlyActive && status === 'connected' ? 'Disconnect' : 'Connect'}
+                 <Button size="sm" variant={isCurrentlyActive && peerStatus === 'connected' ? 'destructive' : 'default'} onClick={handleConnect} className="w-24" disabled={isConnectButtonDisabled}>
+                    {isCurrentlyActive && peerStatus === 'connected' ? 'Disconnect' : 'Connect'}
                 </Button>
             </div>
             <div className="flex items-center justify-between pl-14">
@@ -128,7 +132,7 @@ const PeerItem = ({ peer }: { peer: Peer }) => {
 
 
 export function DeviceList() {
-  const { peers } = usePeerManagerStore();
+  const peers = usePeerManagerStore(s => s.peers);
 
   return (
     <Card>

@@ -4,35 +4,40 @@ import { SidebarTrigger } from "@/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ShareLinkDialog } from "@/components/share-link-dialog";
 import { Button } from "@/ui/button";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, QrCode } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
 import { useTransferStore } from "@/core/transfer";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import type { TransferFile } from "@/core/transfer";
-import { QrCodeDialog } from "../qr-code-dialog";
 
 const CHUNK_SIZE = 128 * 1024; // 128KB for better performance
 const PARALLEL_CHUNKS = 4; // Number of chunks to send in parallel
 
-export function Header() {
+export function Header({ onPairDevice }: { onPairDevice: () => void }) {
+  // --- Granular Selectors for Performance ---
+  // Only subscribe to the peer's connection status and name
   const peerStatus = usePeerStore(s => s.status);
-  const activePeer = usePeerStore(s => s.activePeer);
-  const sendJson = usePeerStore(s => s.sendJson);
-  const sendChunk = usePeerStore(s => s.sendChunk);
+  const activePeerName = usePeerStore(s => s.activePeer?.name);
+  // Only subscribe to the count of pending files, not the whole array
+  const filesToSendCount = useTransferStore(s => s.files.filter(f => f.status === 'pending' && f.direction === 'sent').length);
+  // Select the peer instance separately for the effect
   const peer = usePeerStore(s => s.peer);
-
-  const { files, updateFileStatus, updateFileProgress, calculateFileChecksum, setFileChecksum, getFile } = useTransferStore();
+  
   const { toast } = useToast();
   const [isPreparing, setIsPreparing] = useState(false);
-  const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
-
+  
   const sendFileInParallel = useCallback(async (file: File, startChunk = 0) => {
+      // Get non-reactive state and functions directly from the store
+      const { updateFileStatus, updateFileProgress } = useTransferStore.getState();
+      const { sendChunk } = usePeerStore.getState();
+
       updateFileStatus(file.name, 'sending');
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       let sentBytes = startChunk * CHUNK_SIZE;
-      let chunksInFlight = 0;
+      
       let nextChunkIndex = startChunk;
+      const sendQueue: Promise<void>[] = [];
 
       const processChunk = async (chunkIndex: number) => {
           if (chunkIndex >= totalChunks || usePeerStore.getState().status !== 'connected') {
@@ -42,7 +47,6 @@ export function Header() {
               return;
           }
 
-          chunksInFlight++;
           const start = chunkIndex * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const chunkSlice = file.slice(start, end);
@@ -60,23 +64,25 @@ export function Header() {
           } catch (error) {
               console.error(`Error sending chunk ${chunkIndex}:`, error);
               updateFileStatus(file.name, 'error');
-              // This will stop the loop
-              nextChunkIndex = totalChunks;
-          } finally {
-              chunksInFlight--;
-              // If there are more chunks to send, send the next one
-              if (nextChunkIndex < totalChunks) {
-                  processChunk(nextChunkIndex++);
-              }
+              // Stop sending more chunks for this file
+              nextChunkIndex = totalChunks; 
           }
       };
-
-      // Start the initial batch of parallel transfers
-      for (let i = 0; i < PARALLEL_CHUNKS && nextChunkIndex < totalChunks; i++) {
-          processChunk(nextChunkIndex++);
-      }
       
-  }, [sendChunk, updateFileStatus, updateFileProgress]);
+      const worker = async () => {
+        while(nextChunkIndex < totalChunks) {
+          const currentIndex = nextChunkIndex++;
+          await processChunk(currentIndex);
+        }
+      }
+
+      // Start parallel workers
+      for (let i = 0; i < PARALLEL_CHUNKS; i++) {
+          sendQueue.push(worker());
+      }
+      await Promise.all(sendQueue);
+      
+  }, []); // Dependencies are stable or obtained from getState
 
 
   // Handle resume requests from the receiver
@@ -85,6 +91,7 @@ export function Header() {
 
     const handleData = (data: ArrayBuffer) => {
        try {
+        const { getFile } = useTransferStore.getState();
         const messageString = new TextDecoder().decode(data);
         const message = JSON.parse(messageString);
 
@@ -103,11 +110,15 @@ export function Header() {
     return () => {
       peer.removeListener('data', handleData);
     };
-  }, [peer, getFile, sendFileInParallel]);
+  }, [peer, sendFileInParallel]); // Effect only re-runs if peer instance changes
 
 
   const handleSend = async () => {
-    if (peerStatus !== 'connected' || !activePeer) {
+    // Get fresh state directly inside the handler
+    const { status: currentPeerStatus, activePeer: currentActivePeer, sendJson } = usePeerStore.getState();
+    const { files, calculateFileChecksum, setFileChecksum, getFile } = useTransferStore.getState();
+
+    if (currentPeerStatus !== 'connected' || !currentActivePeer) {
       toast({ variant: 'destructive', title: 'Not Connected', description: 'Please connect to a peer before sending files.' });
       return;
     }
@@ -130,29 +141,22 @@ export function Header() {
     }
 
     setIsPreparing(false);
-    toast({ title: 'Sending Files', description: `Initiating transfer of ${filesToSend.length} file(s) to ${activePeer.name}.` });
-
+    toast({ title: 'Sending Files', description: `Initiating transfer of ${filesToSend.length} file(s) to ${currentActivePeer.name}.` });
 
     for (const transferFile of filesToSend) {
-        // Send metadata first and wait for potential resume request
         sendJson({
           type: 'metadata',
           payload: { name: transferFile.file.name, size: transferFile.file.size, type: transferFile.file.type, checksum: transferFile.checksum! }
         });
         
-        // Give a moment for the receiver to process metadata and request a resume
         await new Promise(resolve => setTimeout(resolve, 200));
 
         const currentTransferState = getFile(transferFile.file.name);
-        // If the peer has requested a resume, the status will be 'resuming' and the resume handler will start the transfer.
-        // Otherwise, start from the beginning.
         if (currentTransferState && currentTransferState.status !== 'resuming') {
           await sendFileInParallel(transferFile.file);
         }
     }
   };
-
-  const filesToSendCount = useTransferStore(s => s.files.filter(f => f.status === 'pending' && f.direction === 'sent').length);
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm md:px-6">
@@ -161,7 +165,10 @@ export function Header() {
         <h1 className="text-h2">File Transfer</h1>
       </div>
       <div className="flex items-center gap-2">
-        <QrCodeDialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen} />
+        <Button variant="outline" onClick={onPairDevice}>
+          <QrCode />
+          <span>Pair Device</span>
+        </Button>
         <ShareLinkDialog />
         <Button 
           variant="accent"

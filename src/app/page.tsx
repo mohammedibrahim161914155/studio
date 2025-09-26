@@ -10,8 +10,8 @@ import { useEffect, useState, useRef } from "react";
 import { usePeerStore } from "@/connection/peer";
 import { useToast } from "@/hooks/use-toast";
 import pako from 'pako';
-import { QrCodeDialog } from "@/components/qr-code-dialog";
 import { usePeerManagerStore, useKeyStore } from "@/core/peer-manager";
+import { QrCodeDialog } from "@/components/qr-code-dialog";
 
 const decodeOfferFromUrl = (encodedOffer: string): string | null => {
     try {
@@ -28,12 +28,17 @@ const decodeOfferFromUrl = (encodedOffer: string): string | null => {
 
 
 export default function Home() {
-  const { connectFromOffer, connectToPeer, createPeerAsInitiator, status: peerStatus } = usePeerStore();
-  const { peers } = usePeerManagerStore();
   const { toast } = useToast();
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
   const autoConnectAttempted = useRef(false);
+  
+  // Selectors for specific state to prevent re-renders
+  const peerStatus = usePeerStore(s => s.status);
+  const peers = usePeerManagerStore(s => s.peers);
   const { generateKeys, isGenerating } = useKeyStore();
+  const createPeerAsInitiator = usePeerStore(s => s.createPeerAsInitiator);
+  const connectToPeer = usePeerStore(s => s.connectToPeer);
+  const connectFromOffer = usePeerStore(s => s.connectFromOffer);
 
   // Generate crypto keys on startup
   useEffect(() => {
@@ -120,7 +125,7 @@ export default function Home() {
         </Sidebar>
         <div className="flex flex-col">
           <SidebarInset>
-            <Header />
+            <Header onPairDevice={() => setIsQrDialogOpen(true)} />
             <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
               <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
                 <div className="md:col-span-2 lg:col-span-3">

@@ -8,12 +8,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose
 } from "@/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import { QrCode, ScanLine, Loader2, Copy, VideoOff } from "lucide-react";
+import { ScanLine, Loader2, Copy, VideoOff } from "lucide-react";
 import QRCode from "qrcode.react";
 import { usePeerStore } from "@/connection/peer";
 import { Textarea } from "@/ui/textarea";
@@ -23,7 +22,7 @@ import { type SignalData } from "simple-peer";
 import jsQR from "jsqr";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 
-const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, onOpenChange: (open: boolean) => void }) => {
+const QrScanner = ({ onScan }: { onScan: (data: string) => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -32,8 +31,11 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
 
   useEffect(() => {
     let stream: MediaStream | null = null;
+    let isActive = true;
     
     const tick = () => {
+      if (!isActive) return;
+
       if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && canvasRef.current) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -50,7 +52,7 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
 
           if (code) {
             onScan(code.data);
-            return;
+            return; // Stop scanning once a code is found
           }
         }
       }
@@ -60,6 +62,7 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
     const getCameraPermission = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (!isActive) return;
         setHasCameraPermission(true);
 
         if (videoRef.current) {
@@ -68,6 +71,7 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
           animationFrameId.current = requestAnimationFrame(tick);
         }
       } catch (error) {
+        if (!isActive) return;
         console.error('Error accessing camera:', error);
         setHasCameraPermission(false);
         toast({
@@ -81,6 +85,7 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
     getCameraPermission();
 
     return () => {
+      isActive = false;
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
@@ -119,11 +124,13 @@ const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, o
 export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void}) {
   const [activeTab, setActiveTab] = useState("share");
   
-  const status = usePeerStore(s => s.status);
-  const activePeer = usePeerStore(s => s.activePeer);
+  // Select state granularly
+  const peerStatus = usePeerStore(s => s.status);
+  const activePeerName = usePeerStore(s => s.activePeer?.name);
   const currentOffer = usePeerStore(s => s.currentOffer);
   const currentAnswer = usePeerStore(s => s.currentAnswer);
 
+  // Select actions
   const signal = usePeerStore(s => s.signal);
   const connectFromOffer = usePeerStore(s => s.connectFromOffer);
   const createPeerAsInitiator = usePeerStore(s => s.createPeerAsInitiator);
@@ -137,27 +144,29 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
   
   // Effect to manage state when dialog opens/closes
   useEffect(() => {
-    if(!open) {
-      setPastedSignal("");
-      setTimeout(() => setActiveTab("share"), 200);
-    } else {
-        // Ensure an offer exists when opening
+    if(open) {
+        // Ensure a valid offer exists when opening the dialog.
         if(!currentOffer) {
             createPeerAsInitiator();
         }
+    } else {
+        // Reset local state when closing
+        setPastedSignal("");
+        // A small delay before switching tabs to avoid visual glitches
+        setTimeout(() => setActiveTab("share"), 200); 
     }
   }, [open, currentOffer, createPeerAsInitiator]);
 
   // Effect to close dialog on successful connection
   useEffect(() => {
-    if(status === 'connected' && open) {
+    if(peerStatus === 'connected' && open) {
         toast({
             title: "Successfully Connected!",
-            description: `You are now connected to ${activePeer?.name || 'your peer'}.`,
+            description: `You are now connected to ${activePeerName || 'your peer'}.`,
         });
-        setTimeout(() => onOpenChange(false), 500);
+        onOpenChange(false);
     }
-  }, [status, toast, activePeer, open, onOpenChange]);
+  }, [peerStatus, toast, activePeerName, open, onOpenChange]);
 
   const handleQrScan = (data: string) => {
     if (data) {
@@ -207,12 +216,6 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" onClick={() => onOpenChange(true)}>
-          <QrCode />
-          <span>Pair Device</span>
-        </Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-h2">Pair a New Device</DialogTitle>
@@ -224,7 +227,7 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="share">
-              <QrCode /> Share Offer
+              Share Offer
             </TabsTrigger>
             <TabsTrigger value="connect">
               <ScanLine /> Connect to Offer
@@ -254,8 +257,8 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
                   </div>
                    <DialogFooter className="mt-4">
                      <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                     <Button onClick={handleSignalAnswer} disabled={!pastedSignal || status === 'connecting' || status === 'connected'}>
-                        {status === 'connecting' ? <><Loader2 className="animate-spin" /><span>Connecting...</span></> : 'Connect'}
+                     <Button onClick={handleSignalAnswer} disabled={!pastedSignal || peerStatus === 'connecting' || peerStatus === 'connected'}>
+                        {peerStatus === 'connecting' ? <><Loader2 className="animate-spin" /><span>Connecting...</span></> : 'Connect'}
                      </Button>
                    </DialogFooter>
                 </>
@@ -288,7 +291,7 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
                         <p className="text-sm-text text-muted-foreground">
                             Scan the other device's QR code or paste their offer text below.
                         </p>
-                        <QrScanner onScan={handleQrScan} onOpenChange={onOpenChange} />
+                        <QrScanner onScan={handleQrScan} />
                         <div className="relative flex items-center justify-center">
                             <span className="absolute bg-background px-2 text-xs text-muted-foreground">OR</span>
                             <div className="w-full h-px bg-border"></div>
