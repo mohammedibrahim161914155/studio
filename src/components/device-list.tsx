@@ -1,14 +1,14 @@
 
 'use client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
-import { Avatar, AvatarFallback } from "@/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { usePeerStore } from "@/connection/peer";
 import { usePeerManagerStore, type Peer } from "@/core/peer-manager";
 import { Wifi, WifiOff, Loader2, Trash2, Edit, Check, X, ShieldCheck, ShieldAlert, BadgeCheck } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { Input } from "@/ui/input";
+import { Input } from "@/components/ui/input";
 
 const StatusIcon = ({ peer, isActive }: { peer: Peer, isActive: boolean }) => {
   const currentStatus = isActive ? usePeerStore(s => s.status) : peer.status;

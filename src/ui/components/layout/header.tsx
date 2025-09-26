@@ -1,10 +1,10 @@
 
 'use client';
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger } from "@/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ShareLinkDialog } from "@/components/share-link-dialog";
 import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";
 import { useTransferStore } from "@/core/transfer";
