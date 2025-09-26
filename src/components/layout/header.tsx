@@ -28,59 +28,57 @@ export function Header({ onPairDevice }: { onPairDevice: () => void }) {
   const [isPreparing, setIsPreparing] = useState(false);
   
   const sendFileInParallel = useCallback(async (file: File, startChunk = 0) => {
-      // Get non-reactive state and functions directly from the store
-      const { updateFileStatus, updateFileProgress } = useTransferStore.getState();
-      const { sendChunk } = usePeerStore.getState();
+    // Get non-reactive state and functions directly from the store
+    const { updateFileStatus, updateFileProgress } = useTransferStore.getState();
+    const { sendChunk } = usePeerStore.getState();
 
-      updateFileStatus(file.name, 'sending');
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      let sentBytes = startChunk * CHUNK_SIZE;
-      
-      let nextChunkIndex = startChunk;
-      const sendQueue: Promise<void>[] = [];
+    updateFileStatus(file.name, 'sending');
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    let sentBytes = startChunk * CHUNK_SIZE;
+    
+    let nextChunkIndex = startChunk;
 
-      const processChunk = async (chunkIndex: number) => {
-          if (chunkIndex >= totalChunks || usePeerStore.getState().status !== 'connected') {
-              if (usePeerStore.getState().status !== 'connected') {
-                  updateFileStatus(file.name, 'error');
-              }
-              return;
-          }
-
-          const start = chunkIndex * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const chunkSlice = file.slice(start, end);
-          
-          try {
-              const arrayBuffer = await chunkSlice.arrayBuffer();
-              sendChunk({
-                  name: file.name,
-                  chunk: arrayBuffer,
-                  chunkIndex: chunkIndex,
-                  totalChunks: totalChunks,
-              });
-              sentBytes += arrayBuffer.byteLength;
-              updateFileProgress(file.name, sentBytes);
-          } catch (error) {
-              console.error(`Error sending chunk ${chunkIndex}:`, error);
-              updateFileStatus(file.name, 'error');
-              // Stop sending more chunks for this file
-              nextChunkIndex = totalChunks; 
-          }
-      };
-      
-      const worker = async () => {
+    const worker = async () => {
         while(nextChunkIndex < totalChunks) {
-          const currentIndex = nextChunkIndex++;
-          await processChunk(currentIndex);
-        }
-      }
+            // Check for connection loss or abortion before processing a new chunk
+            if (usePeerStore.getState().status !== 'connected') {
+                updateFileStatus(file.name, 'error');
+                return; // End this worker
+            }
 
-      // Start parallel workers
-      for (let i = 0; i < PARALLEL_CHUNKS; i++) {
-          sendQueue.push(worker());
-      }
-      await Promise.all(sendQueue);
+            const chunkIndex = nextChunkIndex++;
+            const start = chunkIndex * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const chunkSlice = file.slice(start, end);
+
+            try {
+                const arrayBuffer = await chunkSlice.arrayBuffer();
+                sendChunk({
+                    name: file.name,
+                    chunk: arrayBuffer,
+                    chunkIndex: chunkIndex,
+                    totalChunks: totalChunks,
+                });
+                sentBytes += arrayBuffer.byteLength;
+                updateFileProgress(file.name, sentBytes);
+            } catch (error) {
+                console.error(`Error sending chunk ${chunkIndex}:`, error);
+                updateFileStatus(file.name, 'error');
+                // Stop all workers for this file by setting the index to the end
+                nextChunkIndex = totalChunks; 
+                return; // End this worker
+            }
+        }
+    };
+
+    // Start parallel workers
+    const workers = [];
+    for (let i = 0; i < PARALLEL_CHUNKS; i++) {
+        workers.push(worker());
+    }
+    
+    // Wait for all workers to complete
+    await Promise.all(workers);
       
   }, []); // Dependencies are stable or obtained from getState
 
