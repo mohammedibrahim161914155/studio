@@ -128,7 +128,7 @@ export default function Home() {
         </div>
       </div>
     </SidebarProvider>
-    {showQrDialog && <QrCodeDialog onOpenChange={setShowQrDialog} />}
+    <QrCodeDialog open={showQrDialog} onOpenChange={setShowQrDialog} />
     </>
   );
 }

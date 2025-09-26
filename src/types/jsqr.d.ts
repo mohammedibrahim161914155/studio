@@ -11,7 +11,7 @@ declare module 'jsqr' {
       topRightCorner: { x: number; y: number };
       topLeftCorner: { x: number; y: number };
       bottomRightCorner: { x: number; y: number };
-      bottomLeftCorner: { x-value: number; y: number };
+      bottomLeftCorner: { 'x-value': number; y: number };
       topRightFinderPattern: { x: number; y: number };
       topLeftFinderPattern: { x: number; y: number };
       bottomLeftFinderPattern: { x: number; y: number };

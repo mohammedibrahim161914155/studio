@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/ui/button";
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
   DialogClose
 } from "@/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
-import { QrCode, ScanLine, Loader2, Copy } from "lucide-react";
+import { QrCode, ScanLine, Loader2, Copy, VideoOff } from "lucide-react";
 import QRCode from "qrcode.react";
 import { usePeerStore } from "@/connection/peer";
 import { Textarea } from "@/ui/textarea";
@@ -20,9 +20,103 @@ import { Label } from "@/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { SignalData } from "simple-peer";
 import { usePeerManagerStore } from "@/core/peer-manager";
+import jsQR from "jsqr";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
+
+const QrScanner = ({ onScan }: { onScan: (data: string) => void }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let animationFrameId: number;
+
+    const tick = () => {
+      if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && canvasRef.current) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (code) {
+            onScan(code.data);
+            return; // Stop scanning once a code is found
+          }
+        }
+      }
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    const getCameraPermission = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        setHasCameraPermission(true);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          animationFrameId = requestAnimationFrame(tick);
+        }
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use this feature.',
+        });
+      }
+    };
+
+    getCameraPermission();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [onScan, toast]);
+
+  return (
+    <div className="relative w-full aspect-square bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+      <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <div className="absolute inset-0 border-4 border-white/50 rounded-lg" style={{ clipPath: 'polygon(0% 0%, 0% 100%, 25% 100%, 25% 25%, 75% 25%, 75% 75%, 25% 75%, 25% 100%, 100% 100%, 100% 0%)' }} />
+
+      {hasCameraPermission === false && (
+        <Alert variant="destructive" className="absolute m-4">
+          <VideoOff className="h-4 w-4" />
+          <AlertTitle>Camera Access Required</AlertTitle>
+          <AlertDescription>
+            Please allow camera access to scan a QR code.
+          </AlertDescription>
+        </Alert>
+      )}
+       {hasCameraPermission === null && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+          <Loader2 className="w-8 h-8 animate-spin text-white"/>
+          <p className="text-white mt-2">Requesting camera...</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 export function QrCodeDialog() {
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("share");
   const { 
     createPeer, 
     signal, 
@@ -51,6 +145,11 @@ export function QrCodeDialog() {
         destroyPeer();
       }
       setCurrentOffer(null);
+      // Reset to default tab when closing
+      setTimeout(() => setActiveTab("share"), 200);
+    } else {
+        // When opening, immediately create an offer
+        handleCreateOffer();
     }
   }, [open, status, currentOffer, destroyPeer, setCurrentOffer]);
 
@@ -65,17 +164,25 @@ export function QrCodeDialog() {
     }
   }, [status, toast, activePeer]);
 
+  const handleQrScan = (data: string) => {
+    if (data) {
+        setPastedSignal(data);
+        handleConnectWithOffer(data);
+    }
+  };
 
   const handleCreateOffer = () => {
-    destroyPeer();
-    createPeer(true);
+    if (activeTab === 'share' || !currentOffer) {
+        destroyPeer();
+        createPeer(true);
+    }
   };
   
-  const handleConnectWithOffer = () => {
+  const handleConnectWithOffer = (offerString: string) => {
     try {
-        const parsedSignal: SignalData = JSON.parse(pastedSignal);
+        const parsedSignal: SignalData = JSON.parse(offerString);
         if (parsedSignal.type !== 'offer') {
-            throw new Error("Pasted text is not a connection offer.");
+            throw new Error("Scanned code or pasted text is not a valid connection offer.");
         }
         connectFromOffer(parsedSignal);
         toast({ title: "Offer Received", description: "Generating an answer to send back." });
@@ -123,7 +230,7 @@ export function QrCodeDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="share" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="share" onClick={handleCreateOffer}>
               <QrCode /> Share Offer
@@ -172,28 +279,42 @@ export function QrCodeDialog() {
 
           <TabsContent value="connect">
               <div className="space-y-4 p-1 pt-4">
-                  <p className="text-sm-text text-muted-foreground">
-                      Paste the connection offer from the other device. Your answer will be generated to send back.
-                  </p>
-                  <div className="space-y-2">
-                      <Label htmlFor="pasted-offer">Connection Offer from Peer</Label>
-                      <Textarea id="pasted-offer" placeholder="Paste the offer text here..." value={pastedSignal} onChange={(e) => setPastedSignal(e.target.value)} rows={4} className="font-code text-xs"/>
-                  </div>
-                    {answerSignalString && (
-                      <div className="space-y-2">
-                          <Label htmlFor="answer-signal">Your Answer (Send this back)</Label>
-                          <div className="flex items-center gap-2">
+                {answerSignalString ? (
+                    <div className="space-y-2">
+                        <Label htmlFor="answer-signal">Your Answer (Send this back)</Label>
+                        <p className="text-sm-text text-muted-foreground">Have the other device scan this QR code, or copy the text to send back.</p>
+                        <div className="p-4 bg-white rounded-lg flex justify-center">
+                            <QRCode value={answerSignalString} size={220} fgColor="#09090b" bgColor="#ffffff" />
+                        </div>
+                        <div className="flex items-center gap-2">
                             <Textarea id="answer-signal" value={answerSignalString} readOnly rows={4} className="font-code text-xs bg-muted flex-1"/>
                             <Button variant="ghost" size="icon" aria-label="Copy Answer" onClick={() => handleCopy(answerSignalString)}><Copy /></Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">The connection will be established once the other peer receives your answer.</p>
-                      </div>
-                    )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">The connection will be established once the other peer receives your answer.</p>
+                    </div>
+                ) : (
+                    <>
+                        <p className="text-sm-text text-muted-foreground">
+                            Scan the other device's QR code or paste their offer text below.
+                        </p>
+                        <QrScanner onScan={handleQrScan} />
+                        <div className="relative flex items-center justify-center">
+                            <span className="absolute bg-background px-2 text-xs text-muted-foreground">OR</span>
+                            <div className="w-full h-px bg-border"></div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="pasted-offer">Paste Connection Offer</Label>
+                            <Textarea id="pasted-offer" placeholder="Paste the offer text here..." value={pastedSignal} onChange={(e) => setPastedSignal(e.target.value)} rows={4} className="font-code text-xs"/>
+                        </div>
+                    </>
+                )}
                 <DialogFooter className="mt-4">
                     <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                    <Button onClick={handleConnectWithOffer} disabled={!pastedSignal || !!answerSignalString}>
-                        Receive Offer
-                    </Button>
+                     {!answerSignalString && (
+                        <Button onClick={() => handleConnectWithOffer(pastedSignal)} disabled={!pastedSignal || !!answerSignalString}>
+                            Receive Offer
+                        </Button>
+                     )}
                 </DialogFooter>
               </div>
           </TabsContent>

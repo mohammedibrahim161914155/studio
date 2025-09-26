@@ -114,8 +114,7 @@ const QrScanner = ({ onScan }: { onScan: (data: string) => void }) => {
 };
 
 
-export function QrCodeDialog() {
-  const [open, setOpen] = useState(false);
+export function QrCodeDialog({ onOpenChange, ...props }: React.ComponentProps<typeof Dialog>) {
   const [activeTab, setActiveTab] = useState("share");
   const { 
     createPeer, 
@@ -135,10 +134,12 @@ export function QrCodeDialog() {
   const activePeerDetails = activePeer ? getPeer(activePeer.id) : null;
   const offerSignalString = currentOffer ? JSON.stringify(currentOffer) : "";
   const answerSignalString = activePeerDetails?.answer ? JSON.stringify(activePeerDetails.answer) : "";
+  
+  const isOpen = props.open;
 
   // Effect to manage state when dialog opens/closes
   useEffect(() => {
-    if(!open) {
+    if(!isOpen) {
       setPastedSignal("");
       // Clean up temporary peer/offer if connection wasn't established
       if (status !== 'connected' && currentOffer) {
@@ -151,7 +152,8 @@ export function QrCodeDialog() {
         // When opening, immediately create an offer
         handleCreateOffer();
     }
-  }, [open, status, currentOffer, destroyPeer, setCurrentOffer]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // Effect to close dialog on successful connection
   useEffect(() => {
@@ -160,9 +162,11 @@ export function QrCodeDialog() {
             title: "Successfully Connected!",
             description: `You are now connected to ${activePeer?.name || 'your peer'}.`,
         });
-        setTimeout(() => setOpen(false), 1000);
+        if (onOpenChange) {
+            setTimeout(() => onOpenChange(false), 1000);
+        }
     }
-  }, [status, toast, activePeer]);
+  }, [status, toast, activePeer, onOpenChange]);
 
   const handleQrScan = (data: string) => {
     if (data) {
@@ -215,9 +219,9 @@ export function QrCodeDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog onOpenChange={onOpenChange} {...props}>
       <DialogTrigger asChild>
-        <Button variant="outline" onClick={() => setOpen(true)}>
+        <Button variant="outline">
           <QrCode />
           <span>Pair Device</span>
         </Button>
