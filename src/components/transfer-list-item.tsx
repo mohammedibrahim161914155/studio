@@ -45,18 +45,16 @@ const FilePreview = ({ file }: { file: File }) => {
     const isImage = file.type.startsWith('image/');
 
     useEffect(() => {
-        let objectUrl: string | null = null;
         if (isImage && file.size > 0) {
-            objectUrl = URL.createObjectURL(file);
+            const objectUrl = URL.createObjectURL(file);
             setPreview(objectUrl);
-        }
-
-        // Cleanup function to revoke the object URL if the component unmounts
-        return () => {
-            if (objectUrl) {
+            
+            // Cleanup function to revoke the object URL when the component unmounts or the file changes
+            return () => {
                 URL.revokeObjectURL(objectUrl);
-            }
-        };
+                setPreview(null);
+            };
+        }
     }, [file, isImage]);
 
     if (isImage && preview) {
