@@ -5,7 +5,7 @@ import Peer, { type Instance, type SignalData } from 'simple-peer';
 import { useTransferStore } from '@/core/transfer';
 import { type Peer as PeerInfo, usePeerManagerStore, useKeyStore } from '@/core/peer-manager';
 import { useToast } from '@/hooks/use-toast';
-import { addChunk, getReceivedChunkIndexes, clearFileChunks } from '@/core/db';
+import { addChunk, getReceivedChunkIndexes, clearFileChunks, getFileChunks } from '@/core/db';
 import { useBenchmarkStore } from '@/core/benchmark';
 
 export type PeerStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'verifying';
