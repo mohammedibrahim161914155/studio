@@ -1,5 +1,5 @@
 
-import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { TransferHistoryList } from "@/components/transfer-history-list";

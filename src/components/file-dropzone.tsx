@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/ui/card";
 import { UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTransferStore } from '@/core/transfer';

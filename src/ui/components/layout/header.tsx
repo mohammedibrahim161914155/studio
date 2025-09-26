@@ -3,7 +3,7 @@
 import { SidebarTrigger } from "@/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ShareLinkDialog } from "@/components/share-link-dialog";
-import { QrCodeDialog } from "@/ui/components/qr-code-dialog";
+import { QrCodeDialog } from "@/components/qr-code-dialog";
 import { Button } from "@/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { usePeerStore } from "@/connection/peer";

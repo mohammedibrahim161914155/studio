@@ -2,13 +2,13 @@
 "use client";
 
 import { useLogStore, LogEntry } from "@/core/transfer-log";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/ui/table";
 import { File, ArrowUpRight, ArrowDownLeft, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/ui/badge";
+import { Button } from "@/ui/button";
+import { ScrollArea } from "@/ui/scroll-area";
 
 // Helper to format bytes
 const formatBytes = (bytes: number, decimals = 2) => {

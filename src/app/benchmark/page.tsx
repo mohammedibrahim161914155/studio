@@ -2,11 +2,11 @@
 'use client';
 
 import { useState } from 'react';
-import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset } from "@/ui/sidebar";
 import { Header } from "@/components/layout/header";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card";
+import { Button } from "@/ui/button";
 import { usePeerStore } from '@/connection/peer';
 import { useBenchmarkStore, BenchmarkResult } from '@/core/benchmark';
 import { useToast } from "@/hooks/use-toast";

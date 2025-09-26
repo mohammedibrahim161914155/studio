@@ -11,9 +11,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
-} from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+} from "@/ui/sidebar";
+import { Separator } from "@/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 
 export function SidebarNav() {
   const pathname = usePathname();

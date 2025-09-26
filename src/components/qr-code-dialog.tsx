@@ -1,7 +1,7 @@
 
 'use client';
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,17 +11,17 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { QrCode, ScanLine, Loader2, Copy, VideoOff } from "lucide-react";
 import QRCode from "qrcode.react";
 import { usePeerStore } from "@/connection/peer";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Textarea } from "@/ui/textarea";
+import { Label } from "@/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { type SignalData } from "simple-peer";
 import jsQR from "jsqr";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 
 const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, onOpenChange: (open: boolean) => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);

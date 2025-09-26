@@ -1,9 +1,9 @@
 
 "use client";
 
-import { TableCell, TableRow } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
+import { TableCell, TableRow } from "@/ui/table";
+import { Progress } from "@/ui/progress";
+import { Button } from "@/ui/button";
 import { Trash2, File, CheckCircle2, AlertTriangle, ShieldCheck, Hourglass, RefreshCw } from "lucide-react";
 import { type TransferFile, useTransferStore } from "@/core/transfer";
 import { useEffect, useState } from "react";
