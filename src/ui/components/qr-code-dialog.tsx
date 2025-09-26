@@ -23,7 +23,7 @@ import { type SignalData } from "simple-peer";
 import jsQR from "jsqr";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 
-const QrScanner = ({ onScan }: { onScan: (data: string) => void }) => {
+const QrScanner = ({ onScan, onOpenChange }: { onScan: (data: string) => void, onOpenChange: (open: boolean) => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -116,7 +116,7 @@ const QrScanner = ({ onScan }: { onScan: (data: string) => void }) => {
 };
 
 
-export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean)}) {
+export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void}) {
   const [activeTab, setActiveTab] = useState("share");
   
   const status = usePeerStore(s => s.status);
@@ -288,7 +288,7 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
                         <p className="text-sm-text text-muted-foreground">
                             Scan the other device's QR code or paste their offer text below.
                         </p>
-                        <QrScanner onScan={handleQrScan} />
+                        <QrScanner onScan={handleQrScan} onOpenChange={onOpenChange} />
                         <div className="relative flex items-center justify-center">
                             <span className="absolute bg-background px-2 text-xs text-muted-foreground">OR</span>
                             <div className="w-full h-px bg-border"></div>
