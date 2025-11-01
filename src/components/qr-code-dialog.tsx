@@ -170,7 +170,6 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const handleQrScan = (data: string) => {
     if (data) {
-        setPastedSignal(data);
         handleConnectWithOffer(data);
     }
   };
@@ -183,6 +182,7 @@ export function QrCodeDialog({ open, onOpenChange }: { open: boolean, onOpenChan
         }
         destroyPeer(); // Destroy any existing peer before creating a new one
         connectFromOffer(parsedSignal);
+        setPastedSignal(offerString); // Keep the offer in state
         toast({ title: "Offer Received", description: "Generating an answer to send back." });
     } catch(e) {
          toast({ variant: "destructive", title: "Invalid Offer", description: (e as Error).message });
